@@ -4,7 +4,7 @@ from typing import Set
 import grpc
 from concurrent import futures
 
-from proto import raft_pb2, raft_pb2_grpc
+from proto import raft_pb2_grpc
 
 
 addresses = {
@@ -36,4 +36,3 @@ def serve(node_port: str, node):
 
 def confirm():
     input("Please press enter when the nodes are up to continue with the demonstration...\n")
-    print("Let us commence.")

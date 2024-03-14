@@ -5,8 +5,7 @@ Hey, I head your database is strong. Let me fight it!
 - `node_implementation.py` contains the canonical Node class.
 It also inherits the correct gRPC class so write the handling
 of RPC requests in the class itself.
-- Just use `node.py` and `node2.py` as 2 different nodes
-for testing purposes.
+- Usage is updated to `python node.py <id> <ip:port>`
 - `raft_init.py` can be broken if so wish, but it makes the node 
 files shorter, so let it be.
 - I hope I have not made a mistake.
