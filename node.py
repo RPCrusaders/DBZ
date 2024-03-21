@@ -23,6 +23,16 @@ def main(args):
     time.sleep(1)
     confirm()
 
+
+    # Broadcast RequestVote RPCs to all other nodes
+    node.broadcast(message={
+        "term": 1,
+        "candidate_id": node.id,
+        "last_log_index": -1,
+        "last_log_term": -1
+    
+    })
+
     node.other_nodes = get_node_stubs_other_than(args.address)
     for stub in node.other_nodes:
         args = {
@@ -36,6 +46,7 @@ def main(args):
             print(response.vote_granted)
         except _InactiveRpcError:
             print('Node is down!!')
+
         while True:
             pass
 
