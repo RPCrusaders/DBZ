@@ -9,9 +9,12 @@ from roles import Role
 
 log_entry = namedtuple('log_entry', ['msg', 'term'])
 
+
 class Node(raft_pb2_grpc.RaftServiceServicer):
-    def __init__(self, id, timeout_min=150, timeout_max=300):
-        self.id = id
+    def __init__(self, _id, timeout_min=150, timeout_max=300):
+        self.election_timeout = None
+        self.election_timer = None
+        self.id = _id
         self.timeout_min = timeout_min
         self.timeout_max = timeout_max
         self.reset_election_timeout()
@@ -25,7 +28,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         # Volatile state on all servers
         self.current_role = Role.FOLLOWER
         self.current_leader = None
-        self.votes_received = -1
+        self.votes_received = 0
         self.sent_length = {}
         self.acked_length = {}
 
@@ -72,9 +75,16 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         }
         return raft_pb2.VoteReply(**ret_args)
 
-    def Heartbeat(self, request, context):
-        return raft_pb2.HeartbeatReply()
+    def ServeClient(self, request, context):
+        ret_args = {
+            "data": 'teri mummy',
+            "leader_id": 69,
+            "success": False
+        }
+        return raft_pb2.ClientReply(**ret_args)
 
+    def AppendEntries(self, request, context):
+        pass
 
     def broadcast(self, message):
         """
@@ -96,8 +106,6 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 print(f"Server {self.id}: Leader {self.current_leader} is down!!")
 
     # TODO: implement the functions for receiving LogRequest, sending LogResponse, and receiving LogResponse
-
-
 
     def replicate_log(self, leader_id, follower_id):
         """

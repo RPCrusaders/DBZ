@@ -6,8 +6,7 @@ from . import raft_pb2 as raft__pb2
 
 
 class RaftServiceStub(object):
-    """voting service
-    python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. raft.proto
+    """python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. --pyi_out=. raft.proto
     """
 
     def __init__(self, channel):
@@ -17,20 +16,24 @@ class RaftServiceStub(object):
             channel: A grpc.Channel.
         """
         self.RequestVote = channel.unary_unary(
-                '/helloworld.RaftService/RequestVote',
+                '/RaftService/RequestVote',
                 request_serializer=raft__pb2.VoteRequest.SerializeToString,
                 response_deserializer=raft__pb2.VoteReply.FromString,
                 )
-        self.Heartbeat = channel.unary_unary(
-                '/helloworld.RaftService/Heartbeat',
-                request_serializer=raft__pb2.HeartbeatRequest.SerializeToString,
-                response_deserializer=raft__pb2.HeartbeatReply.FromString,
+        self.AppendEntries = channel.unary_unary(
+                '/RaftService/AppendEntries',
+                request_serializer=raft__pb2.AppendEntriesRequest.SerializeToString,
+                response_deserializer=raft__pb2.AppendEntriesResponse.FromString,
+                )
+        self.ServeClient = channel.unary_unary(
+                '/RaftService/ServeClient',
+                request_serializer=raft__pb2.ClientRequest.SerializeToString,
+                response_deserializer=raft__pb2.ClientReply.FromString,
                 )
 
 
 class RaftServiceServicer(object):
-    """voting service
-    python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. raft.proto
+    """python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. --pyi_out=. raft.proto
     """
 
     def RequestVote(self, request, context):
@@ -39,8 +42,15 @@ class RaftServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Heartbeat(self, request, context):
+    def AppendEntries(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ServeClient(self, request, context):
+        """rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply) {}
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -53,21 +63,25 @@ def add_RaftServiceServicer_to_server(servicer, server):
                     request_deserializer=raft__pb2.VoteRequest.FromString,
                     response_serializer=raft__pb2.VoteReply.SerializeToString,
             ),
-            'Heartbeat': grpc.unary_unary_rpc_method_handler(
-                    servicer.Heartbeat,
-                    request_deserializer=raft__pb2.HeartbeatRequest.FromString,
-                    response_serializer=raft__pb2.HeartbeatReply.SerializeToString,
+            'AppendEntries': grpc.unary_unary_rpc_method_handler(
+                    servicer.AppendEntries,
+                    request_deserializer=raft__pb2.AppendEntriesRequest.FromString,
+                    response_serializer=raft__pb2.AppendEntriesResponse.SerializeToString,
+            ),
+            'ServeClient': grpc.unary_unary_rpc_method_handler(
+                    servicer.ServeClient,
+                    request_deserializer=raft__pb2.ClientRequest.FromString,
+                    response_serializer=raft__pb2.ClientReply.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'helloworld.RaftService', rpc_method_handlers)
+            'RaftService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
  # This class is part of an EXPERIMENTAL API.
 class RaftService(object):
-    """voting service
-    python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. raft.proto
+    """python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. --pyi_out=. raft.proto
     """
 
     @staticmethod
@@ -81,14 +95,14 @@ class RaftService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/helloworld.RaftService/RequestVote',
+        return grpc.experimental.unary_unary(request, target, '/RaftService/RequestVote',
             raft__pb2.VoteRequest.SerializeToString,
             raft__pb2.VoteReply.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def Heartbeat(request,
+    def AppendEntries(request,
             target,
             options=(),
             channel_credentials=None,
@@ -98,8 +112,25 @@ class RaftService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/helloworld.RaftService/Heartbeat',
-            raft__pb2.HeartbeatRequest.SerializeToString,
-            raft__pb2.HeartbeatReply.FromString,
+        return grpc.experimental.unary_unary(request, target, '/RaftService/AppendEntries',
+            raft__pb2.AppendEntriesRequest.SerializeToString,
+            raft__pb2.AppendEntriesResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def ServeClient(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/RaftService/ServeClient',
+            raft__pb2.ClientRequest.SerializeToString,
+            raft__pb2.ClientReply.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

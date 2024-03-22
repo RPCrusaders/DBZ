@@ -1,13 +1,11 @@
 syntax = "proto3";
 
-
-package helloworld;
-
-// voting service
-// python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. raft.proto
+// python -m grpc_tools.protoc -I. --python_out=.  --grpc_python_out=. --pyi_out=. raft.proto
 service RaftService{
   rpc RequestVote (VoteRequest) returns (VoteReply) {}
-  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply) {}
+  rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse) {}
+  rpc ServeClient (ClientRequest) returns (ClientReply);
+//  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply) {}
 }
 
 message VoteRequest {
@@ -22,12 +20,36 @@ message VoteReply {
   bool vote_granted = 2;
 }
 
-message HeartbeatRequest {
+message AppendEntriesRequest {
   int32 term = 1;
   int32 leader_id = 2;
+  int32 prev_log_index = 3;
+  int32 prev_log_term = 4;
+  repeated string logs = 5;
+  int32 leader_commit_index = 6;
 }
 
-message HeartbeatReply {
+message AppendEntriesResponse {
   int32 term = 1;
   bool success = 2;
 }
+
+message ClientRequest {
+  string request = 1;
+}
+
+message ClientReply {
+  string data = 1;
+  int32 leader_id = 2;
+  bool success = 3;
+}
+
+//message HeartbeatRequest {
+//  int32 term = 1;
+//  int32 leader_id = 2;
+//}
+//
+//message HeartbeatReply {
+//  int32 term = 1;
+//  bool success = 2;
+//}

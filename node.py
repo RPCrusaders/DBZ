@@ -1,6 +1,6 @@
 from threading import Thread
 import time
-from grpc._channel import _InactiveRpcError
+import grpc
 import argparse
 
 from node_implementation import Node
@@ -44,8 +44,9 @@ def main(args):
         try:
             response = stub.RequestVote(raft_pb2.VoteRequest(**args))
             print(response.vote_granted)
-        except _InactiveRpcError:
-            print('Node is down!!')
+        except grpc.RpcError as rpc_error:
+            if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
+                print('Node is down get bent')
 
         while True:
             pass
