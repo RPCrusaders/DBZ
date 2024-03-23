@@ -63,12 +63,15 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
     # RPC related section
     def RequestVote(self, request, context):
-        print('omg received a vote request')
-        print(request.term)
-        print(request.candidate_id)
-        print(request.last_log_index)
-        print(request.last_log_term)
-
+        """
+        Method that determines whether to give a vote to an incoming RequestVote request containing a VoteRequest.
+        Args:
+            request:VoteRequest = {term:int, candidate_id:int, last_log_index:int, last_log_term:int}
+            context:Any, is part of gRPC internals
+        Returns:
+            ret_args:VoteReply = {term:int, vote_granted:bool}
+        TODO: Update this docstring when the voting functionality has been added. We like documentation.
+        """
         ret_args = {
             "term": 1,
             "vote_granted": False
@@ -76,6 +79,9 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         return raft_pb2.VoteReply(**ret_args)
 
     def ServeClient(self, request, context):
+        """
+        Method for handling client requests.
+        """
         ret_args = {
             "data": 'teri mummy',
             "leader_id": 69,
@@ -84,7 +90,20 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         return raft_pb2.ClientReply(**ret_args)
 
     def AppendEntries(self, request, context):
-        pass
+        """
+        Method used for heartbeats and log updating.
+        Use this method to make decisions on when the node receives an AppendEntries request.
+        Args:
+            request:AppendEntriesRequest = {term:int, leader_id:int, prev_log_index:int, prev_log_term:int,
+             logs:List[str],leader_commit_index:int}
+            context:Any, is part of gRPC internals
+        Returns:
+            ret_args:AppendEntriesReply = {term:int, success:bool}
+        TODO: Update this docstring when the logging functionality has been added. We like documentation.
+        """
+        ret_args = {"term": 1,
+                    "success": False}
+        return raft_pb2.AppendEntriesResponse(**ret_args)
 
     def broadcast(self, message):
         """
