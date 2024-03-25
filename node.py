@@ -43,7 +43,7 @@ def broadcast_send_logs(node: Node):
             "leader_id": node.current_leader,
             "prev_log_index": 1,
             "prev_log_term": 1,
-            "logs": [],
+            "logs": [raft_pb2.LogEntry(term=1, msg="bruhhh")],
             "leader_commit_index": 1
         }
         for stub in node.other_nodes_stubs:

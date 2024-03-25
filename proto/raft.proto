@@ -24,13 +24,18 @@ message LogRequest {
   int32 leader_id = 2;
   int32 prev_log_index = 3;
   int32 prev_log_term = 4;
-  repeated string logs = 5;
+  repeated LogEntry logs = 5;
   int32 leader_commit_index = 6;
 }
 
 message LogResponse {
   int32 term = 1;
   bool success = 2;
+}
+
+message LogEntry {
+  int32 term = 1;
+  string msg = 2;
 }
 
 message ClientRequest {

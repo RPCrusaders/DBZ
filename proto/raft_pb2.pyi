@@ -1,7 +1,7 @@
 from google.protobuf.internal import containers as _containers
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Optional as _Optional
+from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -37,9 +37,9 @@ class LogRequest(_message.Message):
     leader_id: int
     prev_log_index: int
     prev_log_term: int
-    logs: _containers.RepeatedScalarFieldContainer[str]
+    logs: _containers.RepeatedCompositeFieldContainer[LogEntry]
     leader_commit_index: int
-    def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prev_log_index: _Optional[int] = ..., prev_log_term: _Optional[int] = ..., logs: _Optional[_Iterable[str]] = ..., leader_commit_index: _Optional[int] = ...) -> None: ...
+    def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prev_log_index: _Optional[int] = ..., prev_log_term: _Optional[int] = ..., logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., leader_commit_index: _Optional[int] = ...) -> None: ...
 
 class LogResponse(_message.Message):
     __slots__ = ("term", "success")
@@ -48,6 +48,14 @@ class LogResponse(_message.Message):
     term: int
     success: bool
     def __init__(self, term: _Optional[int] = ..., success: bool = ...) -> None: ...
+
+class LogEntry(_message.Message):
+    __slots__ = ("term", "msg")
+    TERM_FIELD_NUMBER: _ClassVar[int]
+    MSG_FIELD_NUMBER: _ClassVar[int]
+    term: int
+    msg: str
+    def __init__(self, term: _Optional[int] = ..., msg: _Optional[str] = ...) -> None: ...
 
 class ClientRequest(_message.Message):
     __slots__ = ("request",)

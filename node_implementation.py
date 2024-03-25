@@ -95,7 +95,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         Use this method to make decisions on when the node receives an AppendEntries request.
         Args:
             request:LogRequest = {term:int, leader_id:int, prev_log_index:int, prev_log_term:int,
-             logs:List[str],leader_commit_index:int}
+             logs:List[raft_pb2.LogEntry: {term:int, msg:str}]
+             ,leader_commit_index:int}
             context:Any, is part of gRPC internals
         Returns:
             ret_args:LogResponse = {term:int, success:bool}
