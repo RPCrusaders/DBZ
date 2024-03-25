@@ -12,6 +12,7 @@ Hey, I head your database is strong. Let me fight it!
 - contains code for _sending_ the required RPC requests. Clearly this will require multithreading.
 - RPC requests to dead nodes can now be simulated without the system
 falling apart thanks to try-catch.
+- Please make use of the information that is returned through the `response` variable and proceed further in the algorithm.
 
 ### node_implementation.py
 - contains the canonical Node class.
