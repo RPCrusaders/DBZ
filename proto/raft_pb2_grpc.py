@@ -18,12 +18,12 @@ class RaftServiceStub(object):
         self.RequestVote = channel.unary_unary(
                 '/RaftService/RequestVote',
                 request_serializer=raft__pb2.VoteRequest.SerializeToString,
-                response_deserializer=raft__pb2.VoteReply.FromString,
+                response_deserializer=raft__pb2.VoteResponse.FromString,
                 )
-        self.AppendEntries = channel.unary_unary(
-                '/RaftService/AppendEntries',
-                request_serializer=raft__pb2.AppendEntriesRequest.SerializeToString,
-                response_deserializer=raft__pb2.AppendEntriesResponse.FromString,
+        self.SendLogs = channel.unary_unary(
+                '/RaftService/SendLogs',
+                request_serializer=raft__pb2.LogRequest.SerializeToString,
+                response_deserializer=raft__pb2.LogResponse.FromString,
                 )
         self.ServeClient = channel.unary_unary(
                 '/RaftService/ServeClient',
@@ -42,15 +42,14 @@ class RaftServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def AppendEntries(self, request, context):
+    def SendLogs(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ServeClient(self, request, context):
-        """rpc Heartbeat (HeartbeatRequest) returns (HeartbeatReply) {}
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -61,12 +60,12 @@ def add_RaftServiceServicer_to_server(servicer, server):
             'RequestVote': grpc.unary_unary_rpc_method_handler(
                     servicer.RequestVote,
                     request_deserializer=raft__pb2.VoteRequest.FromString,
-                    response_serializer=raft__pb2.VoteReply.SerializeToString,
+                    response_serializer=raft__pb2.VoteResponse.SerializeToString,
             ),
-            'AppendEntries': grpc.unary_unary_rpc_method_handler(
-                    servicer.AppendEntries,
-                    request_deserializer=raft__pb2.AppendEntriesRequest.FromString,
-                    response_serializer=raft__pb2.AppendEntriesResponse.SerializeToString,
+            'SendLogs': grpc.unary_unary_rpc_method_handler(
+                    servicer.SendLogs,
+                    request_deserializer=raft__pb2.LogRequest.FromString,
+                    response_serializer=raft__pb2.LogResponse.SerializeToString,
             ),
             'ServeClient': grpc.unary_unary_rpc_method_handler(
                     servicer.ServeClient,
@@ -97,12 +96,12 @@ class RaftService(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/RaftService/RequestVote',
             raft__pb2.VoteRequest.SerializeToString,
-            raft__pb2.VoteReply.FromString,
+            raft__pb2.VoteResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
-    def AppendEntries(request,
+    def SendLogs(request,
             target,
             options=(),
             channel_credentials=None,
@@ -112,9 +111,9 @@ class RaftService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/RaftService/AppendEntries',
-            raft__pb2.AppendEntriesRequest.SerializeToString,
-            raft__pb2.AppendEntriesResponse.FromString,
+        return grpc.experimental.unary_unary(request, target, '/RaftService/SendLogs',
+            raft__pb2.LogRequest.SerializeToString,
+            raft__pb2.LogResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 

@@ -24,7 +24,7 @@ def broadcast_request_vote(node: Node):
             "last_log_index": -1,
             "last_log_term": -1
         }
-        for stub in node.other_nodes:
+        for stub in node.other_nodes_stubs:
             try:
                 response = stub.RequestVote(raft_pb2.VoteRequest(**vote_request))
                 print(response.vote_granted)
@@ -35,8 +35,8 @@ def broadcast_request_vote(node: Node):
                     print('The node is down!')
 
 
-# Broadcast AppendEntries requests to all other nodes
-def broadcast_append_entries(node: Node):
+# Broadcast SendLogs requests to all other nodes
+def broadcast_send_logs(node: Node):
     while True:
         append_entries_request = {
             "term": node.current_term,
@@ -46,9 +46,9 @@ def broadcast_append_entries(node: Node):
             "logs": [],
             "leader_commit_index": 1
         }
-        for stub in node.other_nodes:
+        for stub in node.other_nodes_stubs:
             try:
-                response = stub.AppendEntries(raft_pb2.AppendEntriesRequest(**append_entries_request))
+                response = stub.SendLogs(raft_pb2.LogRequest(**append_entries_request))
                 print(response.term)
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
@@ -63,11 +63,11 @@ def main(args):
     port = args.address.split(':')[-1]
     thread = Thread(target=serve, args=(port, node))
     thread.start()
-    node.other_nodes = get_node_stubs_other_than(args.address)
+    node.other_nodes_stubs = get_node_stubs_other_than(args.address)
     time.sleep(1)
     confirm()
 
-    append_entries_thread = Thread(target=broadcast_append_entries, args=(node, ))
+    append_entries_thread = Thread(target=broadcast_send_logs, args=(node, ))
     request_vote_thread = Thread(target=broadcast_request_vote, args=(node, ))
 
     append_entries_thread.start()

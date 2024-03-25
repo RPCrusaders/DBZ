@@ -32,7 +32,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.sent_length = {}
         self.acked_length = {}
 
-        self.other_nodes = set()
+        self.other_nodes_stubs = set()
 
     def reset_election_timeout(self):
         self.election_timeout = random.randint(self.timeout_min, self.timeout_max) / 1000.0
@@ -76,7 +76,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             "term": 1,
             "vote_granted": False
         }
-        return raft_pb2.VoteReply(**ret_args)
+        return raft_pb2.VoteResponse(**ret_args)
 
     def ServeClient(self, request, context):
         """
@@ -89,21 +89,21 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         }
         return raft_pb2.ClientReply(**ret_args)
 
-    def AppendEntries(self, request, context):
+    def SendLogs(self, request, context):
         """
         Method used for heartbeats and log updating.
         Use this method to make decisions on when the node receives an AppendEntries request.
         Args:
-            request:AppendEntriesRequest = {term:int, leader_id:int, prev_log_index:int, prev_log_term:int,
+            request:LogRequest = {term:int, leader_id:int, prev_log_index:int, prev_log_term:int,
              logs:List[str],leader_commit_index:int}
             context:Any, is part of gRPC internals
         Returns:
-            ret_args:AppendEntriesReply = {term:int, success:bool}
+            ret_args:LogResponse = {term:int, success:bool}
         TODO: Update this docstring when the logging functionality has been added. We like documentation.
         """
         ret_args = {"term": 1,
                     "success": False}
-        return raft_pb2.AppendEntriesResponse(**ret_args)
+        return raft_pb2.LogResponse(**ret_args)
 
     def broadcast(self, message):
         """
@@ -114,7 +114,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         if self.current_role == Role.LEADER:
             self.log.append(log_entry(message, self.current_term))
             self.acked_length[self.id] = len(self.log)
-            for follower in self.other_nodes:
+            for follower in self.other_nodes_stubs:
                 self.replicate_log(self.id, follower.id)
                 print(f"Server {self.id}: Sent log entries to server {follower.id}")
         else:

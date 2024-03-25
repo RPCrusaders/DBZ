@@ -17,7 +17,7 @@ class VoteRequest(_message.Message):
     last_log_term: int
     def __init__(self, term: _Optional[int] = ..., candidate_id: _Optional[int] = ..., last_log_index: _Optional[int] = ..., last_log_term: _Optional[int] = ...) -> None: ...
 
-class VoteReply(_message.Message):
+class VoteResponse(_message.Message):
     __slots__ = ("term", "vote_granted")
     TERM_FIELD_NUMBER: _ClassVar[int]
     VOTE_GRANTED_FIELD_NUMBER: _ClassVar[int]
@@ -25,7 +25,7 @@ class VoteReply(_message.Message):
     vote_granted: bool
     def __init__(self, term: _Optional[int] = ..., vote_granted: bool = ...) -> None: ...
 
-class AppendEntriesRequest(_message.Message):
+class LogRequest(_message.Message):
     __slots__ = ("term", "leader_id", "prev_log_index", "prev_log_term", "logs", "leader_commit_index")
     TERM_FIELD_NUMBER: _ClassVar[int]
     LEADER_ID_FIELD_NUMBER: _ClassVar[int]
@@ -41,7 +41,7 @@ class AppendEntriesRequest(_message.Message):
     leader_commit_index: int
     def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prev_log_index: _Optional[int] = ..., prev_log_term: _Optional[int] = ..., logs: _Optional[_Iterable[str]] = ..., leader_commit_index: _Optional[int] = ...) -> None: ...
 
-class AppendEntriesResponse(_message.Message):
+class LogResponse(_message.Message):
     __slots__ = ("term", "success")
     TERM_FIELD_NUMBER: _ClassVar[int]
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
