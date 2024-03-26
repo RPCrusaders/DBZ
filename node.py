@@ -75,7 +75,7 @@ def main(args):
     time.sleep(1)
     confirm()
     # start the election timer
-    node.start_election_timer()
+    node.reset_election_timeout()
 
     # append_entries_thread = Thread(target=broadcast_send_logs, args=(node, ))
     # request_vote_thread = Thread(target=broadcast_request_vote, args=(node, ))

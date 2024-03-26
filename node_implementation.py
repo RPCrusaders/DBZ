@@ -2,6 +2,7 @@ import random
 import threading
 import time
 from collections import namedtuple
+from math import ceil
 
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
@@ -13,13 +14,13 @@ log_entry = namedtuple('log_entry', ['msg', 'term'])
 
 
 class Node(raft_pb2_grpc.RaftServiceServicer):
-    def __init__(self, _id, timeout_min=150, timeout_max=300):
+    def __init__(self, _id, timeout_min=10000, timeout_max=30000):
         self.election_timeout = None
         self.election_timer = None
         self.id = _id
         self.timeout_min = timeout_min
         self.timeout_max = timeout_max
-        self.reset_election_timeout()
+        # self.reset_election_timeout()
         
         # Persistent state on all servers (Updated on stable storage before responding to RPCs)
         self.current_term = 0
@@ -39,20 +40,30 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
     def reset_election_timeout(self):
         self.stop_election_timer() # Stop the election timer if it's running
         self.election_timeout = random.randint(self.timeout_min, self.timeout_max) / 1000.0 #Set a new random election timeout
+        self.start_election_timer() # Start the election timer
 
     def start_election_timer(self):
         threading.Timer(self.election_timeout, self.start_election).start()
 
     def stop_election_timer(self):
         if self.election_timer and self.election_timer.is_alive():
+            print(f"Server {self.id}: Election timer stopped")
             self.election_timer.cancel()
 
     def start_election(self):
         print(f"Server {self.id}: Election timeout expired. Starting election...")
+        if self.current_role == Role.LEADER:
+            self.stop_election_timer()
+            print(f"Server {self.id}: Already the leader. Cancelling election.")
+            return
+        
+        self.stop_election_timer()
         self.current_term += 1
         self.voted_for = self.id
         self.current_role = Role.CANDIDATE
-        self.votes_received = 0
+        self.votes_received = 1
+        self.voters = [self.id]
+        followers = [];
         vote_request = {
             "term": self.current_term,
             "candidate_id": self.id,
@@ -63,6 +74,12 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             try:
                 response = stub.RequestVote(raft_pb2.VoteRequest(**vote_request))
                 print(f"Node {self.id} received vote from {response.node_id} for term {response.term}, vote granted: {response.vote_granted}")
+                if response.vote_granted and self.current_role == Role.CANDIDATE and self.current_term == response.term:
+                    self.votes_received += 1
+
+                    self.voters.append(response.node_id)
+                if response.node_id not in followers:
+                    followers.append(response.node_id)
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
                     # currently can't tell which request failed, can add that later
@@ -72,8 +89,26 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     print('The node is down!')
         
                         # break
-        self.reset_election_timeout()
-        self.start_election_timer()
+        required_votes = ceil((len(self.other_nodes_stubs)+2) / 2)
+        print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
+        if self.votes_received >= required_votes:
+            print(f"Server {self.id}: Election successful. Received {self.votes_received} votes. Needed {required_votes} votes.")
+            self.current_role = Role.LEADER
+            self.current_leader = self.id
+            self.sent_length[self.id] = len(self.log)
+            self.acked_length[self.id] = len(self.log)
+            for follower in followers:
+                self.sent_length[follower] = 0
+                self.acked_length[follower] = 0
+                # self.replicate_log(self.id, follower)
+            self.stop_election_timer()
+        else:
+            print(f"Server {self.id}: Election failed. Received {self.votes_received} votes. Needed {len(self.other_nodes_stubs)+1 // 2} votes.")
+            # self.current_term = old_term
+            self.current_role = Role.FOLLOWER
+            self.voted_for = -1
+            self.reset_election_timeout()
+            # self.start_election_timer()
         return
         # Send RequestVote RPCs to all other servers
         # If votes received from majority of servers: become leader
@@ -97,12 +132,40 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             ret_args:VoteReply = {term:int, vote_granted:bool}
         TODO: Update this docstring when the voting functionality has been added. We like documentation.
         """
-        ret_args = {
-            "node_id": self.id,
-            "term": 1,
-            "vote_granted": False
-        }
+        self.stop_election_timer()
+        cId = request.candidate_id
+        cTerm = request.term
+        cLogLength = request.last_log_index
+        cLogTerm = request.last_log_term
+
+        if cTerm > self.current_term:
+            self.current_term = cTerm
+            self.voted_for = None
+            self.current_role = Role.FOLLOWER
+            self.stop_election_timer()
+            print(f"Server {self.id}: Updated term to {cTerm} and voted for {cId}")
+        
+        last_term = 0
+
+        if len(self.log) > 0:
+            last_term = self.log[-1].term
+        
+        logOk = cLogTerm > last_term or (cLogTerm == last_term and cLogLength >= len(self.log) - 1)
+
+        if cTerm == self.current_term and (self.voted_for is None or self.voted_for == cId):
+            self.voted_for = cId
+            ret_args = {
+                "term": cTerm,
+                "vote_granted": True
+            }
+        else:
+            ret_args = {
+                "term": cTerm,
+                "vote_granted": False
+            }
+
         self.reset_election_timeout()
+        # self.start_election_timer()
         return raft_pb2.VoteResponse(**ret_args)
 
     def ServeClient(self, request, context):
