@@ -18,12 +18,14 @@ class VoteRequest(_message.Message):
     def __init__(self, term: _Optional[int] = ..., candidate_id: _Optional[int] = ..., last_log_index: _Optional[int] = ..., last_log_term: _Optional[int] = ...) -> None: ...
 
 class VoteResponse(_message.Message):
-    __slots__ = ("term", "vote_granted")
+    __slots__ = ("node_id", "term", "vote_granted")
+    NODE_ID_FIELD_NUMBER: _ClassVar[int]
     TERM_FIELD_NUMBER: _ClassVar[int]
     VOTE_GRANTED_FIELD_NUMBER: _ClassVar[int]
+    node_id: int
     term: int
     vote_granted: bool
-    def __init__(self, term: _Optional[int] = ..., vote_granted: bool = ...) -> None: ...
+    def __init__(self, node_id: _Optional[int] = ..., term: _Optional[int] = ..., vote_granted: bool = ...) -> None: ...
 
 class LogRequest(_message.Message):
     __slots__ = ("term", "leader_id", "prev_log_index", "prev_log_term", "logs", "leader_commit_index")

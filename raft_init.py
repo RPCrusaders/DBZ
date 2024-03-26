@@ -14,13 +14,16 @@ addresses = {
 
 
 def get_node_stubs_other_than(current_node_address: str):
-    addresses.remove(current_node_address)
+    if current_node_address in addresses:
+        addresses.remove(current_node_address)
 
     stubs: Set = set()
     for address in addresses:
         channel = grpc.insecure_channel(target=address)
         stub = raft_pb2_grpc.RaftServiceStub(channel=channel)
         stubs.add(stub)
+    
+    print("Addresses: ", addresses)
     return stubs
 
 

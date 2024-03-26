@@ -15,8 +15,9 @@ message VoteRequest {
 }
 
 message VoteResponse {
-  int32 term = 1;
-  bool vote_granted = 2;
+  int32 node_id = 1;
+  int32 term = 2;
+  bool vote_granted = 3;
 }
 
 message LogRequest {

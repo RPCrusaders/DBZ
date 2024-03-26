@@ -6,6 +6,8 @@ from collections import namedtuple
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
 
+import grpc
+
 
 log_entry = namedtuple('log_entry', ['msg', 'term'])
 
@@ -35,7 +37,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.other_nodes_stubs = set()
 
     def reset_election_timeout(self):
-        self.election_timeout = random.randint(self.timeout_min, self.timeout_max) / 1000.0
+        self.stop_election_timer() # Stop the election timer if it's running
+        self.election_timeout = random.randint(self.timeout_min, self.timeout_max) / 1000.0 #Set a new random election timeout
 
     def start_election_timer(self):
         threading.Timer(self.election_timeout, self.start_election).start()
@@ -50,16 +53,38 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.voted_for = self.id
         self.current_role = Role.CANDIDATE
         self.votes_received = 0
+        vote_request = {
+            "term": self.current_term,
+            "candidate_id": self.id,
+            "last_log_index": -1,
+            "last_log_term": -1
+        }
+        for stub in self.other_nodes_stubs:
+            try:
+                response = stub.RequestVote(raft_pb2.VoteRequest(**vote_request))
+                print(f"Node {self.id} received vote from {response.node_id} for term {response.term}, vote granted: {response.vote_granted}")
+            except grpc.RpcError as rpc_error:
+                if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
+                    # currently can't tell which request failed, can add that later
+                    # by changing type of other_nodes to dict instead of set
+                    # print(rpc_error.details())
+                    # print(rpc_error)
+                    print('The node is down!')
+        
+                        # break
+        self.reset_election_timeout()
+        self.start_election_timer()
+        return
         # Send RequestVote RPCs to all other servers
         # If votes received from majority of servers: become leader
 
-    def run(self):
-        while True:
-            self.reset_election_timeout()
-            self.start_election_timer()
+    # def run(self):
+    #     while True:
+    #         self.reset_election_timeout()
+    #         self.start_election_timer()
 
-            # TODO: (Raft 4/9): Periodically send heartbeats to other servers. Also, broadcast the commit index to other servers periodically
-            time.sleep(5)
+    #         # TODO: (Raft 4/9): Periodically send heartbeats to other servers. Also, broadcast the commit index to other servers periodically
+    #         time.sleep(5)
 
     # RPC related section
     def RequestVote(self, request, context):
@@ -73,9 +98,11 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         TODO: Update this docstring when the voting functionality has been added. We like documentation.
         """
         ret_args = {
+            "node_id": self.id,
             "term": 1,
             "vote_granted": False
         }
+        self.reset_election_timeout()
         return raft_pb2.VoteResponse(**ret_args)
 
     def ServeClient(self, request, context):
