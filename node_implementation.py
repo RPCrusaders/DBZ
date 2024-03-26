@@ -99,11 +99,42 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
              ,leader_commit_index:int}
             context:Any, is part of gRPC internals
         Returns:
-            ret_args:LogResponse = {term:int, success:bool}
+            ret_args:LogResponse = {follower_id:int, term:int, acked_length:int, success:bool}
         TODO: Update this docstring when the logging functionality has been added. We like documentation.
         """
-        ret_args = {"term": 1,
-                    "success": False}
+
+        if request.term > self.current_term:
+            self.current_term = request.term
+            # self.current_role = Role.FOLLOWER
+            self.voted_for = None
+            # cancel election timer
+            self.stop_election_timer()
+
+        if request.term == self.current_term:
+            self.current_role = Role.FOLLOWER
+            self.current_leader = request.leader_id
+        
+        flag = len(self.log) > request.prev_log_index and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
+        if request.term == self.current_term and flag:
+            # append log entries
+            self.append_log_entries(request.prev_log_index, request.leader_commit_index, request.logs)
+            ack = min(len(self.log), request.prev_log_index + len(request.logs)) # original pseudocode does not use min
+
+            ret_args = {
+                "follower_id": request.leader_id,
+                "term": request.term,
+                "acked_length": ack,
+                "success": True
+            }
+
+        else:
+            ret_args = {
+                "follower_id": request.leader_id,
+                "term": request.term,
+                "acked_length": 0,
+                "success": False
+            }
+
         return raft_pb2.LogResponse(**ret_args)
 
     def broadcast(self, message):
@@ -132,7 +163,48 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         TODO: This function is called by the leader to send log entries to a follower
         TODO: implement functionality for sending LogRequest
         """
-        pass
+        prefix_length = self.sent_length[follower_id]
+        suffix = self.log[prefix_length:]
+        prefix_term = 0
+
+        if prefix_length > 0:
+            prefix_term = self.log[prefix_length - 1].term
+
+        # Send LogRequest to follower
+        for follower in self.other_nodes_stubs:
+            if follower.id == follower_id:
+                log_response = follower.SendLogs(raft_pb2.LogRequest(term=self.current_term,
+                                        leader_id=leader_id,
+                                        prev_log_index=prefix_length,
+                                        prev_log_term=prefix_term,
+                                        logs=suffix,
+                                        leader_commit_index=self.commit_length))
+                
+                self._receive_log_response(log_response)
+
+
+    def _receive_log_response(self, log_response):
+        """
+        Handles the LogResponse acknowledgements from the follower
+        Args:
+            log_response:LogResponse = {follower_id:int, term:int, acked_length:int, success:bool}
+        """
+
+        if self.current_term == log_response.term and self.current_role == Role.LEADER:
+            if log_response.success and log_response.acked_length > self.acked_length[log_response.follower_id]:
+                self.sent_length[log_response.follower_id] = log_response.acked_length
+                self.acked_length[log_response.follower_id] = log_response.acked_length
+                # Commit log entries
+                self.commit_log_entries()
+            elif self.sent_length[log_response.follower_id] > 0:
+                self.sent_length[log_response.follower_id] -= 1
+                self.replicate_log(self.id, log_response.follower_id) # Question: Could this possibly lead to infinite recursion in some case?
+
+        elif log_response.term > self.current_term:
+            self.current_term = log_response.term
+            self.current_role = Role.FOLLOWER
+            self.voted_for = None
+            self.stop_election_timer()
 
     def append_log_entries(self, prefix_length, leader_commit, suffix):
         pass
