@@ -2,6 +2,7 @@ import random
 import threading
 import time
 from collections import namedtuple
+from typing import List
 
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
@@ -20,11 +21,11 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.timeout_min = timeout_min
         self.timeout_max = timeout_max
         self.reset_election_timeout()
-        
+
         # Persistent state on all servers (Updated on stable storage before responding to RPCs)
         self.current_term = 0
         self.voted_for = None
-        self.log = []
+        self.log: List[raft_pb2.LogEntry] = []
         self.commit_length = 0
 
         # Volatile state on all servers
@@ -119,7 +120,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
     def SendLogs(self, request, context):
         """
         Method used for heartbeats and log updating.
-        Use this method to make decisions on when the node receives an AppendEntries request.
+        Use this method to make decisions on when the node receives a LogRequest request.
         Args:
             request:LogRequest = {term:int, leader_id:int, prev_log_index:int, prev_log_term:int,
              logs:List[raft_pb2.LogEntry: {term:int, msg:str}]
@@ -140,7 +141,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         if request.term == self.current_term:
             self.current_role = Role.FOLLOWER
             self.current_leader = request.leader_id
-        
+
         flag = len(self.log) > request.prev_log_index and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
         if request.term == self.current_term and flag:
             # append log entries
@@ -206,9 +207,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                                         prev_log_term=prefix_term,
                                         logs=suffix,
                                         leader_commit_index=self.commit_length))
-                
-                self._receive_log_response(log_response)
 
+                self._receive_log_response(log_response)
 
     def _receive_log_response(self, log_response):
         """
@@ -233,8 +233,31 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.voted_for = None
             self.stop_election_timer()
 
-    def append_log_entries(self, prefix_length, leader_commit, suffix):
-        pass
+    def append_log_entries(self, prefix_length: int, leader_commit: int, suffix: List[raft_pb2.LogEntry]):
+        """
+        A follower will call this method to extend logs with entries received from leader.
+        Args:
+            prefix_length: Number of log entries that precede the new suffix.
+            leader_commit: Something I will have to confirm later
+            suffix: Remaining log entries
+        """
+        if (len(suffix) > 0) and (len(self.log) > prefix_length):
+            index = min(len(self.log), prefix_length + len(suffix)) - 1
+            if self.log[index].term != suffix[index - prefix_length].term:
+                self.log = [self.log[i] for i in range(prefix_length - 1)]
+
+        if prefix_length + len(suffix) > len(self.log):
+            for i in range(len(self.log) - prefix_length, len(suffix) - 1):
+                self.log.append(suffix[i])
+
+        if leader_commit > self.commit_length:
+            for i in range(self.commit_length, leader_commit - 1):
+                # TODO: deliver self.log[i] to application (?)
+                pass
+            self.commit_length = leader_commit
 
     def commit_log_entries(self):
+        # define acks(len) = number of nodes who have acknowledged the receipt of
+        # len logs or more
+        min_acks = len(self.other_nodes_stubs) + 1
         pass
