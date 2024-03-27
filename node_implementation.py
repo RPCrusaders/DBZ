@@ -44,12 +44,15 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.start_election_timer() # Start the election timer
 
     def start_election_timer(self):
-        threading.Timer(self.election_timeout, self.start_election).start()
+        self.election_timer = threading.Timer(self.election_timeout, self.start_election)
+        self.election_timer.start()
 
     def stop_election_timer(self):
-        if self.election_timer and self.election_timer.is_alive():
-            print(f"Server {self.id}: Election timer stopped")
+        # print(self.election_timer)
+        if self.election_timer:
+            # print(f"Server {self.id}: Election timer stopped")
             self.election_timer.cancel()
+
 
     def start_election(self):
         print(f"Server {self.id}: Election timeout expired. Starting election...")
@@ -64,7 +67,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.current_role = Role.CANDIDATE
         self.votes_received = 1
         self.voters = [self.id]
-        followers = [];
+        followers = []
         vote_request = {
             "term": self.current_term,
             "candidate_id": self.id,
@@ -91,7 +94,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         
                         # break
         required_votes = ceil((len(self.other_nodes_stubs)+2) / 2)
-        print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
+        # print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
         if self.votes_received >= required_votes:
             print(f"Server {self.id}: Election successful. Received {self.votes_received} votes. Needed {required_votes} votes.")
             self.current_role = Role.LEADER
@@ -108,7 +111,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             # self.current_term = old_term
             self.current_role = Role.FOLLOWER
             self.voted_for = -1
-            self.reset_election_timeout()
+            self.stop_election_timer()
+            # self.reset_election_timeout()
             # self.start_election_timer()
         return
         # Send RequestVote RPCs to all other servers
@@ -157,11 +161,13 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.voted_for = cId
             ret_args = {
                 "term": cTerm,
+                "node_id": self.id,
                 "vote_granted": True
             }
         else:
             ret_args = {
                 "term": cTerm,
+                "node_id": self.id,
                 "vote_granted": False
             }
 
@@ -296,7 +302,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.voted_for = None
             self.stop_election_timer()
 
-    def append_log_entries(self, prefix_length: int, leader_commit: int, suffix: List[raft_pb2.LogEntry]):
+    def append_log_entries(self, prefix_length: int, leader_commit: int, suffix):
         """
         A follower will call this method to extend logs with entries received from leader.
         Args:
