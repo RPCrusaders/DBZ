@@ -56,3 +56,7 @@ message FollowerAckResponse {
   //bool has_committed_meq_length = 1;
   int32 committed_length = 1;
 }
+
+message Message {
+  Message message = 1 ;
+}

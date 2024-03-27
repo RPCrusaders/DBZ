@@ -17,26 +17,20 @@ def parse_args():
 
 # Broadcast RequestVote requests to all other nodes
 def broadcast_request_vote(node: Node):
-    # while True:
     vote_request = {
         "term": node.current_term,
         "candidate_id": node.id,
         "last_log_index": -1,
         "last_log_term": -1
     }
-    for stub in node.other_nodes_stubs:
+    for stub in node.other_nodes_stubs.items():
         try:
             response = stub.RequestVote(raft_pb2.VoteRequest(**vote_request))
             print(f"Node {node.id} received vote from {response.node_id} for term {response.term}, vote granted: {response.vote_granted}")
         except grpc.RpcError as rpc_error:
             if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                # currently can't tell which request failed, can add that later
-                # by changing type of other_nodes to dict instead of set
-                # print(rpc_error.details())
-                # print(rpc_error)
-                print('The node is down!')
-    
-                    # break
+                print('The node {} is down!'.format(node))
+
     node.reset_election_timeout()
     node.start_election_timer()
     return
@@ -53,15 +47,13 @@ def broadcast_send_logs(node: Node):
             "logs": [raft_pb2.LogEntry(term=1, msg="bruhhh")],
             "leader_commit_index": 1
         }
-        for stub in node.other_nodes_stubs:
+        for node, stub in node.other_nodes_stubs.items():
             try:
                 response = stub.SendLogs(raft_pb2.LogRequest(**append_entries_request))
                 print(response.term)
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                    # currently can't tell which request failed, can add that later
-                    # by changing type of other_nodes to dict instead of set
-                    print('The node is down!')
+                    print('The node {} is down!'.format(node))
 
 
 def main(args):
@@ -71,25 +63,11 @@ def main(args):
     print(f"Node {node.id} started at {args.address}")
     thread = Thread(target=serve, args=(port, node))
     thread.start()
-    node.other_nodes_stubs = get_node_stubs_other_than(args.address)
+    node.other_nodes_stubs = get_node_stubs_other_than(args.address, args.id)
     time.sleep(1)
     confirm()
     # start the election timer
     node.reset_election_timeout()
-
-    # append_entries_thread = Thread(target=broadcast_send_logs, args=(node, ))
-    # request_vote_thread = Thread(target=broadcast_request_vote, args=(node, ))
-
-    # append_entries_thread.start()
-    # request_vote_thread.start()
-
-    # Broadcast RequestVote RPCs to all other nodes
-    # node.broadcast(message={
-    #     "term": 1,
-    #     "candidate_id": node.id,
-    #     "last_log_index": -1,
-    #     "last_log_term": -1
-    # })
 
     # this is needed to keep the node alive
     while True:

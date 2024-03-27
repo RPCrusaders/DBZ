@@ -35,7 +35,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.sent_length = {}
         self.acked_length = {}
 
-        self.other_nodes_stubs = set()
+        self.other_nodes_stubs = {}
 
     def reset_election_timeout(self):
         self.stop_election_timer() # Stop the election timer if it's running
@@ -51,7 +51,6 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         if self.election_timer:
             # print(f"Server {self.id}: Election timer stopped")
             self.election_timer.cancel()
-
 
     def start_election(self):
         print(f"Server {self.id}: Election timeout expired. Starting election...")
@@ -73,7 +72,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             "last_log_index": -1,
             "last_log_term": -1
         }
-        for stub in self.other_nodes_stubs:
+        for node, stub in self.other_nodes_stubs.items():
             try:
                 response = stub.RequestVote(raft_pb2.VoteRequest(**vote_request))
                 print(f"Node {self.id} received vote from {response.node_id} for term {response.term}, vote granted: {response.vote_granted}")
@@ -117,13 +116,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         # Send RequestVote RPCs to all other servers
         # If votes received from majority of servers: become leader
 
-    # def run(self):
-    #     while True:
-    #         self.reset_election_timeout()
-    #         self.start_election_timer()
-
-    #         # TODO: (Raft 4/9): Periodically send heartbeats to other servers. Also, broadcast the commit index to other servers periodically
-    #         time.sleep(5)
+    # TODO: (Raft 4/9): Periodically send heartbeats to other servers. Also, broadcast the commit index to other servers periodically
 
     # RPC related section
     def RequestVote(self, request, context):
@@ -242,9 +235,9 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         if self.current_role == Role.LEADER:
             self.log.append(log_entry(message, self.current_term))
             self.acked_length[self.id] = len(self.log)
-            for follower in self.other_nodes_stubs:
-                self.replicate_log(self.id, follower.id)
-                print(f"Server {self.id}: Sent log entries to server {follower.id}")
+            for node_id, follower_stub in self.other_nodes_stubs:
+                self.replicate_log(self.id, follower_stub.id)
+                print(f"Server {self.id}: Sent log entries to server {follower_stub.id}")
         else:
             print(f"Server {self.id}: I am not the leader. Forwarding the message to the leader.")
             try:
@@ -267,7 +260,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             prefix_term = self.log[prefix_length - 1].term
 
         # Send LogRequest to follower
-        for follower in self.other_nodes_stubs:
+        for follower, stub in self.other_nodes_stubs:
             if follower.id == follower_id:
                 log_response = follower.SendLogs(raft_pb2.LogRequest(term=self.current_term,
                                         leader_id=leader_id,
@@ -333,13 +326,13 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         min_acks = len(self.other_nodes_stubs) + 1
         ready = set()
         acks_len_set = set()
-        for stub in self.other_nodes_stubs:
+        for node, stub in self.other_nodes_stubs.items():
             try:
                 response = stub.DetermineFollowerAcks(raft_pb2.FollowerAckRequest())
                 acks_len_set.add(response.committed_length)
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                    print('The node is down!')
+                    print('The node {} is down!'.format(node))
 
         for i in range(1, len(self.log)):
             counter = 0
