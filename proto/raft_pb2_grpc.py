@@ -30,6 +30,11 @@ class RaftServiceStub(object):
                 request_serializer=raft__pb2.ClientRequest.SerializeToString,
                 response_deserializer=raft__pb2.ClientReply.FromString,
                 )
+        self.DetermineFollowerAcks = channel.unary_unary(
+                '/RaftService/DetermineFollowerAcks',
+                request_serializer=raft__pb2.FollowerAckRequest.SerializeToString,
+                response_deserializer=raft__pb2.FollowerAckResponse.FromString,
+                )
 
 
 class RaftServiceServicer(object):
@@ -54,6 +59,12 @@ class RaftServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DetermineFollowerAcks(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RaftServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -71,6 +82,11 @@ def add_RaftServiceServicer_to_server(servicer, server):
                     servicer.ServeClient,
                     request_deserializer=raft__pb2.ClientRequest.FromString,
                     response_serializer=raft__pb2.ClientReply.SerializeToString,
+            ),
+            'DetermineFollowerAcks': grpc.unary_unary_rpc_method_handler(
+                    servicer.DetermineFollowerAcks,
+                    request_deserializer=raft__pb2.FollowerAckRequest.FromString,
+                    response_serializer=raft__pb2.FollowerAckResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -131,5 +147,22 @@ class RaftService(object):
         return grpc.experimental.unary_unary(request, target, '/RaftService/ServeClient',
             raft__pb2.ClientRequest.SerializeToString,
             raft__pb2.ClientReply.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def DetermineFollowerAcks(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/RaftService/DetermineFollowerAcks',
+            raft__pb2.FollowerAckRequest.SerializeToString,
+            raft__pb2.FollowerAckResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
