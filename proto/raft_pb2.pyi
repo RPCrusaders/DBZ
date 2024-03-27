@@ -74,3 +74,15 @@ class ClientReply(_message.Message):
     leader_id: int
     success: bool
     def __init__(self, data: _Optional[str] = ..., leader_id: _Optional[int] = ..., success: bool = ...) -> None: ...
+
+class FollowerAckRequest(_message.Message):
+    __slots__ = ("length",)
+    LENGTH_FIELD_NUMBER: _ClassVar[int]
+    length: int
+    def __init__(self, length: _Optional[int] = ...) -> None: ...
+
+class FollowerAckResponse(_message.Message):
+    __slots__ = ("has_committed_meq_length",)
+    HAS_COMMITTED_MEQ_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    has_committed_meq_length: bool
+    def __init__(self, has_committed_meq_length: bool = ...) -> None: ...

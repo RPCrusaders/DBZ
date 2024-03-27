@@ -4,7 +4,8 @@ syntax = "proto3";
 service RaftService{
   rpc RequestVote (VoteRequest) returns (VoteResponse) {}
   rpc SendLogs (LogRequest) returns (LogResponse) {}
-  rpc ServeClient (ClientRequest) returns (ClientReply);
+  rpc ServeClient (ClientRequest) returns (ClientReply) {}
+  rpc DetermineFollowerAcks (FollowerAckRequest) returns (FollowerAckResponse) {}
 }
 
 message VoteRequest {
@@ -13,7 +14,6 @@ message VoteRequest {
   int32 last_log_index = 3;
   int32 last_log_term = 4;
 }
-
 message VoteResponse {
   int32 node_id = 1;
   int32 term = 2;
@@ -28,12 +28,10 @@ message LogRequest {
   repeated LogEntry logs = 5;
   int32 leader_commit_index = 6;
 }
-
 message LogResponse {
   int32 term = 1;
   bool success = 2;
 }
-
 message LogEntry {
   int32 term = 1;
   string msg = 2;
@@ -42,9 +40,19 @@ message LogEntry {
 message ClientRequest {
   string request = 1;
 }
-
 message ClientReply {
   string data = 1;
   int32 leader_id = 2;
   bool success = 3;
+
+}
+
+message FollowerAckRequest {
+  // so how many log entries have you committed? Are they more than this number here?
+  //int32 length = 1;
+}
+message FollowerAckResponse {
+  // they are more/less than that length number you sent us
+  //bool has_committed_meq_length = 1;
+  int32 committed_length = 1;
 }

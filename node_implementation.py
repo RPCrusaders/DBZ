@@ -1,6 +1,5 @@
 import random
 import threading
-import time
 from collections import namedtuple
 from math import ceil
 from typing import List
@@ -325,8 +324,33 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 pass
             self.commit_length = leader_commit
 
+    def DetermineFollowerAcks(self, request, context):
+        length = request.length
+        return raft_pb2.FollowerAckResponse(self.commit_length >= length)
+
     def commit_log_entries(self):
-        # define acks(len) = number of nodes who have acknowledged the receipt of
-        # len logs or more
+        # define acks(len) = number of nodes who have acknowledged the receipt of len logs or more
         min_acks = len(self.other_nodes_stubs) + 1
-        pass
+        ready = set()
+        acks_len_set = set()
+        for stub in self.other_nodes_stubs:
+            try:
+                response = stub.DetermineFollowerAcks(raft_pb2.FollowerAckRequest())
+                acks_len_set.add(response.committed_length)
+            except grpc.RpcError as rpc_error:
+                if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
+                    print('The node is down!')
+
+        for i in range(1, len(self.log)):
+            counter = 0
+            for j in acks_len_set:
+                if j >= min_acks:
+                    counter += 1
+            if counter >= min_acks:
+                ready.add(i)
+
+        if (len(ready) != 0) and (max(ready) > self.commit_length) and (self.log[max(ready) - 1].term == self.current_term):
+            for i in range(self.commit_length, max(ready)):
+                # TODO: deliver self.log[i] to application (?)
+                pass
+            self.commit_length = max(ready)
