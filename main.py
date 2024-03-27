@@ -8,11 +8,13 @@ import grpc
 import tmp_pb2
 import tmp_pb2_grpc
 
+
+
+
 # enum State {FOLLOWER, CANDIDATE, LEADER}
 FOLLOWER = 0
 CANDIDATE = 1
 LEADER = 2
-
 
 
 class Node:
@@ -53,7 +55,6 @@ class Node:
             time.sleep(5)
 
 
-
 class VotingService(tmp_pb2_grpc.VotingService):
     def RequestVote(self, request, context):
         global current_term
@@ -90,7 +91,7 @@ class VotingService(tmp_pb2_grpc.VotingService):
 def serve():
     port = "50051"
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    tmp_pb2_grpc.add_GreeterServicer_to_server(Greeter(), server)
+    tmp_pb2_grpc.add_VotingServiceServicer_to_server(VotingService(), server)
     server.add_insecure_port("[::]:" + port)
     server.start()
     print("Server started, listening on " + port)
