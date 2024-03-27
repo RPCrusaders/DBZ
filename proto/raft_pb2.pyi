@@ -44,12 +44,16 @@ class LogRequest(_message.Message):
     def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prev_log_index: _Optional[int] = ..., prev_log_term: _Optional[int] = ..., logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., leader_commit_index: _Optional[int] = ...) -> None: ...
 
 class LogResponse(_message.Message):
-    __slots__ = ("term", "success")
+    __slots__ = ("follower_id", "term", "acked_length", "success")
+    FOLLOWER_ID_FIELD_NUMBER: _ClassVar[int]
     TERM_FIELD_NUMBER: _ClassVar[int]
+    ACKED_LENGTH_FIELD_NUMBER: _ClassVar[int]
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    follower_id: int
     term: int
+    acked_length: int
     success: bool
-    def __init__(self, term: _Optional[int] = ..., success: bool = ...) -> None: ...
+    def __init__(self, follower_id: _Optional[int] = ..., term: _Optional[int] = ..., acked_length: _Optional[int] = ..., success: bool = ...) -> None: ...
 
 class LogEntry(_message.Message):
     __slots__ = ("term", "msg")
@@ -76,13 +80,29 @@ class ClientReply(_message.Message):
     def __init__(self, data: _Optional[str] = ..., leader_id: _Optional[int] = ..., success: bool = ...) -> None: ...
 
 class FollowerAckRequest(_message.Message):
-    __slots__ = ("length",)
-    LENGTH_FIELD_NUMBER: _ClassVar[int]
-    length: int
-    def __init__(self, length: _Optional[int] = ...) -> None: ...
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class FollowerAckResponse(_message.Message):
-    __slots__ = ("has_committed_meq_length",)
-    HAS_COMMITTED_MEQ_LENGTH_FIELD_NUMBER: _ClassVar[int]
-    has_committed_meq_length: bool
-    def __init__(self, has_committed_meq_length: bool = ...) -> None: ...
+    __slots__ = ("committed_length",)
+    COMMITTED_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    committed_length: int
+    def __init__(self, committed_length: _Optional[int] = ...) -> None: ...
+
+class broadcasted_msg(_message.Message):
+    __slots__ = ("term", "candidate_id", "last_log_index", "last_log_term")
+    TERM_FIELD_NUMBER: _ClassVar[int]
+    CANDIDATE_ID_FIELD_NUMBER: _ClassVar[int]
+    LAST_LOG_INDEX_FIELD_NUMBER: _ClassVar[int]
+    LAST_LOG_TERM_FIELD_NUMBER: _ClassVar[int]
+    term: int
+    candidate_id: int
+    last_log_index: int
+    last_log_term: int
+    def __init__(self, term: _Optional[int] = ..., candidate_id: _Optional[int] = ..., last_log_index: _Optional[int] = ..., last_log_term: _Optional[int] = ...) -> None: ...
+
+class broadcast_response(_message.Message):
+    __slots__ = ("success",)
+    SUCCESS_FIELD_NUMBER: _ClassVar[int]
+    success: bool
+    def __init__(self, success: bool = ...) -> None: ...

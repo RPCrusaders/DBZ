@@ -99,10 +99,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.current_leader = self.id
             self.sent_length[self.id] = len(self.log)
             self.acked_length[self.id] = len(self.log)
-            for follower in followers:
-                self.sent_length[follower] = 0
-                self.acked_length[follower] = 0
-                # self.replicate_log(self.id, follower)
+            for follower_id in followers:
+                self.sent_length[follower_id] = 0
+                self.acked_length[follower_id] = 0
+                self.replicate_log(self.id, follower_id)
             self.stop_election_timer()
         else:
             print(f"Server {self.id}: Election failed. Received {self.votes_received} votes. Needed {len(self.other_nodes_stubs)+1 // 2} votes.")
@@ -232,18 +232,23 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         Args:
             message: a dictionary containing the keys 'term', 'candidate_id', 'last_log_index', 'last_log_term'
         """
+        success = True
         if self.current_role == Role.LEADER:
             self.log.append(log_entry(message, self.current_term))
             self.acked_length[self.id] = len(self.log)
-            for node_id, follower_stub in self.other_nodes_stubs:
-                self.replicate_log(self.id, follower_stub.id)
-                print(f"Server {self.id}: Sent log entries to server {follower_stub.id}")
+            for follower_id, follower_stub in self.other_nodes_stubs.items():
+                self.replicate_log(self.id, follower_id)
+                print(f"Server {self.id}: Sent log entries to server {follower_id}")
         else:
             print(f"Server {self.id}: I am not the leader. Forwarding the message to the leader.")
             try:
-                self.current_leader.broadcast(message)
+                stub = self.other_nodes_stubs[self.current_leader]
+                return stub.broadcast(message)
             except AttributeError:
                 print(f"Server {self.id}: Leader {self.current_leader} is down!!")
+                success = False
+        print(f"Server {self.id}: Broadcasted message to all other nodes successfully")
+        return {"success": success}
 
     # TODO: implement the functions for receiving LogRequest, sending LogResponse, and receiving LogResponse
 
@@ -260,16 +265,18 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             prefix_term = self.log[prefix_length - 1].term
 
         # Send LogRequest to follower
-        for follower, stub in self.other_nodes_stubs:
-            if follower.id == follower_id:
-                log_response = follower.SendLogs(raft_pb2.LogRequest(term=self.current_term,
+        for _follower_id, stub in self.other_nodes_stubs.items():
+            if _follower_id == follower_id:
+                log_response = stub.SendLogs(raft_pb2.LogRequest(term=self.current_term,
                                         leader_id=leader_id,
                                         prev_log_index=prefix_length,
                                         prev_log_term=prefix_term,
                                         logs=suffix,
                                         leader_commit_index=self.commit_length))
-
+                print(f"Server {self.id}: Sent LogRequest to server {follower_id}")
                 self._receive_log_response(log_response)
+
+        print(f"Received LogResponse from server {follower_id}")
 
     def _receive_log_response(self, log_response):
         """

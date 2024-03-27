@@ -6,6 +6,7 @@ service RaftService{
   rpc SendLogs (LogRequest) returns (LogResponse) {}
   rpc ServeClient (ClientRequest) returns (ClientReply) {}
   rpc DetermineFollowerAcks (FollowerAckRequest) returns (FollowerAckResponse) {}
+  rpc BroadcastMsg (broadcasted_msg) returns (broadcast_response) {}
 }
 
 message VoteRequest {
@@ -29,8 +30,10 @@ message LogRequest {
   int32 leader_commit_index = 6;
 }
 message LogResponse {
-  int32 term = 1;
-  bool success = 2;
+  int32 follower_id = 1;
+  int32 term = 2;
+  int32 acked_length = 3;
+  bool success = 4;
 }
 message LogEntry {
   int32 term = 1;
@@ -57,6 +60,13 @@ message FollowerAckResponse {
   int32 committed_length = 1;
 }
 
-message Message {
-  Message message = 1 ;
+message broadcasted_msg {
+  int32 term = 1;
+  int32 candidate_id = 2;
+  int32 last_log_index = 3;
+  int32 last_log_term = 4;
+}
+
+message broadcast_response {
+  bool success = 1;
 }
