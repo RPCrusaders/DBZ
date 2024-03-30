@@ -1,3 +1,4 @@
+import random
 from typing import Dict
 from grpc import StatusCode, RpcError
 
@@ -28,7 +29,8 @@ class DBZClient:
             if request[0] == 'EXIT':
                 self.run = False
                 break
-            request = "".join(request)
+            request = " ".join(request)
+            print(request)
             self.request_server(request)
 
     def request_server(self, request: str):
@@ -38,27 +40,24 @@ class DBZClient:
         """
         while True:
             try:
-                # I found the leader and connected successfully to them. Yay!
                 response: raft_pb2.ClientReply = self.nodes_and_stubs[self.current_leader_id].ServeClient(raft_pb2.ClientRequest(request=request))
+                # If I did not contact the leader I cannot break the loop
                 if response.success:
                     print('Request served: {}'.format(response.data))
                     return
-
-                # No? let's keep on trying to connect to other nodes in that case
-                for node, stub in self.nodes_and_stubs.items():
-                    response = stub.ServeClient(raft_pb2.ClientRequest(request=request))
-                    if not response.success:
-                        self.current_leader_id = response.leader_id
-                        continue
-                    print('Received from the server: {}'.format(response.data))
+                # if I heard that the leader is None, well. This control branch is probably not
+                # going to be called, though.
+                if response.leader_id is None:
+                    print('DBZError!')
+                    self.current_leader_id = random.randint(1, len(self.nodes_and_stubs))
                     return
+                # well, time to set the leader
+                print('Did not find leader, so setting leader to {}'.format(response.leader_id))
+                self.current_leader_id = response.leader_id
             except RpcError as rpc_error:
                 if rpc_error.code() == StatusCode.UNAVAILABLE:
-                    print('Some node is down')
-                else:
-                    print(rpc_error.code())
-                # else:
-                #     print('That did not work out for you lil buddy, and we will never know why.')
+                    print('Sent a request to a dead leader!')
+                    self.current_leader_id = random.randint(1, len(self.nodes_and_stubs))
 
 
 def main():
@@ -68,3 +67,4 @@ def main():
 
 
 main()
+

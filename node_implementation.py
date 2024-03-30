@@ -8,6 +8,7 @@ import os
 
 from pathlib import Path
 
+import roles
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
 
@@ -122,7 +123,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 self.replicate_log(self.id, node)
             self.stop_election_timer()
 
-            ## leader routine
+            # leader routine
             self.LeaderRoutine()
 
         else:
@@ -157,7 +158,6 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 time.sleep(self.timeout_min * 0.3 / 1000.0)
                 if self.current_role != Role.LEADER:
                     self.write_dump(f"Stepping down.")
-
 
     # RPC related section
     def RequestVote(self, request, context):
@@ -210,30 +210,33 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         # self.start_election_timer()
         return raft_pb2.VoteResponse(**ret_args)
 
-    def ServeClient(self, request, context):
+    def ServeClient(self, request: raft_pb2.ClientRequest, context):
         """
         Method for handling client requests.
         """
-        ret_args = {
-            "data": 'teri mummy',
-            "leader_id": self.current_leader,
-            "success": False
-        }
-        request = request.split(' ')
+        # gRPC-py is trash WHAT DO YOU MEAN FAILED TO SERIALISE RESPONSE WHEN THE FRICKIN
+        # ERROR WAS IN THE REQUEST
+        if self.current_role is not Role.LEADER:
+            return raft_pb2.ClientReply(data='', leader_id=self.current_leader, success=False)
+
+        request_string = request.request
+        print('Serving the request {}'.format(request_string))
+        request_string = request_string.split(' ')
+
         # GET K
-        if request[0] == 'GET':
-            data = self.db_hashmap.get(request[1])
+        if request_string[0] == 'GET':
+            key = request_string[1]
+            data = self.db_hashmap.get(key)
             if data is None:
                 data = ""
-            ret_args["data"] = data
+            return raft_pb2.ClientReply(data=data, leader_id=self.current_leader, success=True)
         # SET K V
-        elif request[0] == 'SET':
-            key = request[1]
-            value = request[2]
+        elif request_string[0] == 'SET':
+            key = request_string[1]
+            value = request_string[2]
             self.db_hashmap[key] = value
-        return raft_pb2.ClientReply(**ret_args)
-
-
+            data = 'Successfully set {} to {}'.format(key, value)
+            return raft_pb2.ClientReply(data=data, leader_id=self.current_leader, success=True)
 
     def SendLogs(self, request, context):
         """
