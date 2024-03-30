@@ -4,6 +4,9 @@ from collections import namedtuple
 from math import ceil
 from typing import List, Dict
 import time
+import os
+
+from pathlib import Path
 
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
@@ -21,7 +24,6 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.id = _id
         self.timeout_min = timeout_min
         self.timeout_max = timeout_max
-        # self.reset_election_timeout()
         # self.broadcast_thread = None
         
         # Persistent state on all servers (Updated on stable storage before responding to RPCs)
@@ -56,21 +58,25 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         if self.election_timer:
             # print(f"Server {self.id}: Election timer stopped")
             self.election_timer.cancel()
+        
+    def write_dump(self, message):
+        file_path = f"./log_nodes_{self.id}"
+        #Make sure the directory exists
+        Path(file_path).mkdir(parents=True, exist_ok=True)
+        #Write the message to the file
+
+        with open(f"log_nodes_{self.id}/dump.txt", "a") as dump_file:
+            dump_file.write(message + "\n")
+        print(f"Server {self.id}: {message}")
 
     def start_election(self):
-        print(f"Server {self.id}: Election timeout expired. Starting election...")
-        if self.current_role == Role.LEADER:
-            self.stop_election_timer()
-            print(f"Server {self.id}: Already the leader. Cancelling election.")
-            return
-        
+        self.write_dump(f"Election timeout expired. Starting election...")
         self.stop_election_timer()
         self.current_term += 1
         self.voted_for = self.id
         self.current_role = Role.CANDIDATE
         self.votes_received = 1
         self.voters = [self.id]
-        followers = []
         vote_request = {
             "term": self.current_term,
             "candidate_id": self.id,
@@ -87,15 +93,15 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     self.votes_received += 1
 
                     self.voters.append(response.node_id)
-                if response.node_id not in followers:
-                    followers.append(response.node_id)
+                else:
+                    self.write_dump(f"Node {self.id} did not receive vote from {response.node_id} for term {response.term}")
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
                     # currently can't tell which request failed, can add that later
                     # by changing type of other_nodes to dict instead of set
                     # print(rpc_error.details())
                     # print(rpc_error)
-                    print('The node is down!')
+                    self.write_dump(f"Error while sending RPC request to: {node}")
                     # assuming the down node is not a candidate
                     self.votes_received += 1
         
@@ -103,22 +109,24 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         required_votes = ceil((len(self.other_nodes_stubs)+2) / 2)
         # print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
         if self.votes_received >= required_votes:
-            print(f"Server {self.id}: Election successful. Received {self.votes_received} votes. Needed {required_votes} votes.")
+            self.write_dump(f"Server {self.id}: Election successful. Received {self.votes_received} votes. Needed {required_votes} votes.")
             self.current_role = Role.LEADER
             self.current_leader = self.id
             self.sent_length[self.id] = len(self.log)
             self.acked_length[self.id] = len(self.log)
-            for follower_id in followers:
-                self.sent_length[follower_id] = 0
-                self.acked_length[follower_id] = 0
-                self.replicate_log(self.id, follower_id)
+            for node, stub in self.other_nodes_stubs.items():
+                if node == self.id:
+                    continue
+                self.sent_length[node] = 0
+                self.acked_length[node] = 0
+                self.replicate_log(self.id, node)
             self.stop_election_timer()
 
             ## leader routine
             self.LeaderRoutine()
 
         else:
-            print(f"Server {self.id}: Election failed. Received {self.votes_received} votes. Needed {len(self.other_nodes_stubs)+1 // 2} votes.")
+            self.write_dump(f"Election failed. Received {self.votes_received} votes. Needed {len(self.other_nodes_stubs)+1 // 2} votes.")
             # self.current_term = old_term
             self.current_role = Role.FOLLOWER
             self.voted_for = -1
@@ -140,13 +148,16 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             None
         """
         while self.current_role == Role.LEADER:
+                        #sleep for 0.3 of the minimum timeout
+            self.write_dump(f"Sending heartbeats to all followers.")
             for follower_id, stub in self.other_nodes_stubs.items():
                 if follower_id == self.id:
                     continue
                 self.replicate_log(self.id, follower_id)
-            #sleep for 0.3 of the minimum timeout
-            time.sleep(self.timeout_min * 0.3 / 1000.0)
-            print(f"Server {self.id}: Sent heartbeats to all followers. Current Role: {self.current_role}")
+                time.sleep(self.timeout_min * 0.3 / 1000.0)
+                if self.current_role != Role.LEADER:
+                    self.write_dump(f"Stepping down.")
+
 
     # RPC related section
     def RequestVote(self, request, context):
@@ -186,12 +197,14 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 "node_id": self.id,
                 "vote_granted": True
             }
+            self.write_dump(f"Voted for {cId} in term {cTerm}")
         else:
             ret_args = {
                 "term": cTerm,
                 "node_id": self.id,
                 "vote_granted": False
             }
+            self.write_dump(f"Did not vote for {cId} in term {cTerm}")
 
         self.reset_election_timeout()
         # self.start_election_timer()
@@ -314,14 +327,20 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         # Send LogRequest to follower
         for _follower_id, stub in self.other_nodes_stubs.items():
             if _follower_id == follower_id:
-                log_response = stub.SendLogs(raft_pb2.LogRequest(term=self.current_term,
+                try:
+                    log_response = stub.SendLogs(raft_pb2.LogRequest(term=self.current_term,
                                         leader_id=leader_id,
                                         prev_log_index=prefix_length,
                                         prev_log_term=prefix_term,
                                         logs=suffix,
                                         leader_commit_index=self.commit_length))
-                print(f"Server {self.id}: Sent LogRequest to server {follower_id}")
-                self._receive_log_response(log_response)
+                    print(f"Server {self.id}: Sent LogRequest to server {follower_id}")
+                    self._receive_log_response(log_response)
+                except grpc.RpcError as rpc_error:
+                    if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
+                        self.write_dump(f"Error while sending RPC request to: {follower_id}")
+                        self.sent_length[follower_id] = 0
+                        self.acked_length[follower_id] = 0
 
         print(f"Received LogResponse from server {follower_id}")
 
@@ -386,7 +405,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 acks_len_set.add(response.committed_length)
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                    print('The node {} is down!'.format(node))
+                    self.write_dump(f"Error while sending RPC request to: {node}")
 
         for i in range(1, len(self.log)):
             counter = 0
