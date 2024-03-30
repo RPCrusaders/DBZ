@@ -2,7 +2,7 @@ import random
 import threading
 from collections import namedtuple
 from math import ceil
-from typing import List
+from typing import List, Dict
 
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
@@ -36,6 +36,9 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.acked_length = {}
 
         self.other_nodes_stubs = {}
+
+        # the point of DBZ
+        self.db_hashmap: Dict[str, str] = {}
 
     def reset_election_timeout(self):
         self.stop_election_timer() # Stop the election timer if it's running
@@ -173,10 +176,24 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         """
         ret_args = {
             "data": 'teri mummy',
-            "leader_id": 69,
+            "leader_id": self.current_leader,
             "success": False
         }
+        request = request.split(' ')
+        # GET K
+        if request[0] == 'GET':
+            data = self.db_hashmap.get(request[1])
+            if data is None:
+                data = ""
+            ret_args["data"] = data
+        # SET K V
+        elif request[0] == 'SET':
+            key = request[1]
+            value = request[2]
+            self.db_hashmap[key] = value
         return raft_pb2.ClientReply(**ret_args)
+
+
 
     def SendLogs(self, request, context):
         """

@@ -28,42 +28,43 @@ class DBZClient:
             if request[0] == 'EXIT':
                 self.run = False
                 break
+            request = "".join(request)
             self.request_server(request)
 
-    def request_server(self, request:str):
-        try:
-            response: raft_pb2.ClientReply = self.nodes_and_stubs[self.current_leader_id].ServeClient(raft_pb2.ClientRequest(request=request))
-            if response.success:
-                print('Request served: {}'.format(response.data))
-                return
-
-        # the following code will only be executed if the leader wasn't contacted
-        # or if the 'leader' was down
-        except RpcError as rpc_error:
-            if rpc_error.code() == StatusCode.UNAVAILABLE:
-                print('The node {} is down! OHHH NO!'.format(self.current_leader_id))
-            else:
-                print('That did not work out for you lil buddy, and we will never know why.')
-
-        for node, stub in self.nodes_and_stubs.items():
+    def request_server(self, request: str):
+        """
+        Ackshually I will keep on trying to get a response from the leader.
+        And keep on trying until I get a success.
+        """
+        while True:
             try:
-                response = stub.ServeClient(raft_pb2.ClientRequest(request))
-                if not response.success:
-                    continue
-                self.current_leader_id = response.leader_id
-                print('Received from the server: {}'.format(response.data))
+                # I found the leader and connected successfully to them. Yay!
+                response: raft_pb2.ClientReply = self.nodes_and_stubs[self.current_leader_id].ServeClient(raft_pb2.ClientRequest(request=request))
+                if response.success:
+                    print('Request served: {}'.format(response.data))
+                    return
+
+                # No? let's keep on trying to connect to other nodes in that case
+                for node, stub in self.nodes_and_stubs.items():
+                    response = stub.ServeClient(raft_pb2.ClientRequest(request=request))
+                    if not response.success:
+                        self.current_leader_id = response.leader_id
+                        continue
+                    print('Received from the server: {}'.format(response.data))
+                    return
             except RpcError as rpc_error:
                 if rpc_error.code() == StatusCode.UNAVAILABLE:
-                    print('The node {} is down! OHHH NO!'.format(node))
+                    print('Some node is down')
                 else:
-                    print('That did not work out for you lil buddy, and we will never know why.')
+                    print(rpc_error.code())
+                # else:
+                #     print('That did not work out for you lil buddy, and we will never know why.')
 
 
 def main():
     client = DBZClient(get_node_stubs_other_than('', -1))
-    client.request_server('SET ur mom')
-    # confirm()
-    # client.menu()
+    confirm()
+    client.menu()
 
 
 main()
