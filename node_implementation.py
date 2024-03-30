@@ -3,6 +3,7 @@ import threading
 from collections import namedtuple
 from math import ceil
 from typing import List
+import time
 
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
@@ -21,6 +22,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.timeout_min = timeout_min
         self.timeout_max = timeout_max
         # self.reset_election_timeout()
+        # self.broadcast_thread = None
         
         # Persistent state on all servers (Updated on stable storage before responding to RPCs)
         self.current_term = 0
@@ -69,10 +71,12 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         vote_request = {
             "term": self.current_term,
             "candidate_id": self.id,
-            "last_log_index": -1,
-            "last_log_term": -1
+            "last_log_index": len(self.log) - 1,
+            "last_log_term": self.log[-1].term if len(self.log) > 0 else 0
         }
         for node, stub in self.other_nodes_stubs.items():
+            if node == self.id:
+                continue
             try:
                 response = stub.RequestVote(raft_pb2.VoteRequest(**vote_request))
                 print(f"Node {self.id} received vote from {response.node_id} for term {response.term}, vote granted: {response.vote_granted}")
@@ -89,6 +93,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     # print(rpc_error.details())
                     # print(rpc_error)
                     print('The node is down!')
+                    # assuming the down node is not a candidate
+                    self.votes_received += 1
         
                         # break
         required_votes = ceil((len(self.other_nodes_stubs)+2) / 2)
@@ -104,6 +110,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 self.acked_length[follower_id] = 0
                 self.replicate_log(self.id, follower_id)
             self.stop_election_timer()
+
+            ## leader routine
+            self.LeaderRoutine()
+
         else:
             print(f"Server {self.id}: Election failed. Received {self.votes_received} votes. Needed {len(self.other_nodes_stubs)+1 // 2} votes.")
             # self.current_term = old_term
@@ -117,6 +127,23 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         # If votes received from majority of servers: become leader
 
     # TODO: (Raft 4/9): Periodically send heartbeats to other servers. Also, broadcast the commit index to other servers periodically
+    def LeaderRoutine(self):
+        """
+        Method that is called when a node becomes a leader. 
+        Does periodic tasks like sending heartbeats to all followers to maintain leadership.
+        Args:
+            None
+        Returns:
+            None
+        """
+        while self.current_role == Role.LEADER:
+            for follower_id, stub in self.other_nodes_stubs.items():
+                if follower_id == self.id:
+                    continue
+                self.replicate_log(self.id, follower_id)
+            #sleep for 0.3 of the minimum timeout
+            time.sleep(self.timeout_min * 0.3 / 1000.0)
+            print(f"Server {self.id}: Sent heartbeats to all followers. Current Role: {self.current_role}")
 
     # RPC related section
     def RequestVote(self, request, context):
@@ -149,7 +176,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         
         logOk = cLogTerm > last_term or (cLogTerm == last_term and cLogLength >= len(self.log) - 1)
 
-        if cTerm == self.current_term and (self.voted_for is None or self.voted_for == cId):
+        if cTerm == self.current_term and (self.voted_for is None or self.voted_for == cId) and logOk:
             self.voted_for = cId
             ret_args = {
                 "term": cTerm,
@@ -198,10 +225,13 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.voted_for = None
             # cancel election timer
             self.stop_election_timer()
-
+        
         if request.term == self.current_term:
             self.current_role = Role.FOLLOWER
             self.current_leader = request.leader_id
+
+        #Reset election timer
+        self.reset_election_timeout()
 
         flag = len(self.log) > request.prev_log_index and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
         if request.term == self.current_term and flag:
