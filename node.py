@@ -15,47 +15,6 @@ def parse_args():
     return parser.parse_args()
 
 
-# Broadcast RequestVote requests to all other nodes
-def broadcast_request_vote(node: Node):
-    vote_request = {
-        "term": node.current_term,
-        "candidate_id": node.id,
-        "last_log_index": -1,
-        "last_log_term": -1
-    }
-    for stub in node.other_nodes_stubs.items():
-        try:
-            response = stub.RequestVote(raft_pb2.VoteRequest(**vote_request))
-            print(f"Node {node.id} received vote from {response.node_id} for term {response.term}, vote granted: {response.vote_granted}")
-        except grpc.RpcError as rpc_error:
-            if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                print('The node {} is down!'.format(node))
-
-    node.reset_election_timeout()
-    node.start_election_timer()
-    return
-
-
-# Broadcast SendLogs requests to all other nodes
-def broadcast_send_logs(node: Node):
-    while True:
-        append_entries_request = {
-            "term": node.current_term,
-            "leader_id": node.current_leader,
-            "prev_log_index": 1,
-            "prev_log_term": 1,
-            "logs": [raft_pb2.LogEntry(term=1, msg="bruhhh")],
-            "leader_commit_index": 1
-        }
-        for node, stub in node.other_nodes_stubs.items():
-            try:
-                response = stub.SendLogs(raft_pb2.LogRequest(**append_entries_request))
-                print(response.term)
-            except grpc.RpcError as rpc_error:
-                if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                    print('The node {} is down!'.format(node))
-
-
 def main(args):
     # start listening for RPC requests from other nodes
     node = Node(args.id)

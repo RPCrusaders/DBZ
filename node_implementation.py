@@ -1,16 +1,15 @@
 import random
+import sys
 import threading
 from collections import namedtuple
 from math import ceil
 from typing import List, Dict
 import time
-
 from pathlib import Path
+import grpc
 
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
-
-import grpc
 
 
 log_entry = namedtuple('log_entry', ['msg', 'term'])
@@ -247,7 +246,26 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.db_hashmap[key] = value
             data = 'Successfully set {} to {}'.format(key, value)
             self.write_logs("{} {}".format(request.request, self.current_term))
+            self.log.append(raft_pb2.LogEntry(term=self.current_term, msg=request.request))
             return raft_pb2.ClientReply(data=data, leader_id=self.current_leader, success=True)
+
+    def update_db_state(self):
+        file_path = f"./log_nodes_{self.id}"
+        Path(file_path).mkdir(parents=True, exist_ok=True)
+        with open(f"log_nodes_{self.id}/logs.txt", "a") as logs_file:
+            history = logs_file.readlines()
+            for request in history:
+                self.execute_db_command(request)
+
+    def execute_db_command(self, request: str):
+        tokens = request.split(" ")
+        command = tokens[0]
+        if command == "NO-OP":
+            return
+        # else the command is assumed to be always SET
+        key = tokens[1]
+        value = tokens[2]
+        self.db_hashmap[key] = value
 
     def SendLogs(self, request, context):
         """
@@ -270,22 +288,27 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.write_metadata()
             # cancel election timer
             self.stop_election_timer()
-        
+
         if request.term == self.current_term:
             self.current_role = Role.FOLLOWER
             self.current_leader = request.leader_id
 
-        #Reset election timer
+        # Reset election timer
         self.reset_election_timeout()
+
 
         # print(self.log, request.prev_log_index, request.prev_log_term, request.logs, request.leader_commit_index)
         flag = len(self.log) > request.prev_log_index and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
         print(request.logs, flag)
         if ((request.term == self.current_term) and flag):
+            print(request.prev_log_index)
+            flag = len(self.log) > (request.prev_log_index) and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
+
+        if request.term == self.current_term and flag:
             # append log entries
             print(f"Server {self.id}: Appending log entries with log size {len(self.log)}")
             self.append_log_entries(request.prev_log_index, request.leader_commit_index, request.logs)
-            ack = min(len(self.log), request.prev_log_index + len(request.logs)) # original pseudocode does not use min
+            ack = min(len(self.log), request.prev_log_index + len(request.logs))  # original pseudocode does not use min
 
             ret_args = {
                 "follower_id": request.leader_id,
@@ -311,7 +334,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         """
         success = True
         if self.current_role == Role.LEADER:
-            self.log.append(log_entry(message, self.current_term))
+            self.log.append(raft_pb2.LogEntry(msg=message, term=self.current_term))
             self.acked_length[self.id] = len(self.log)
             for follower_id, follower_stub in self.other_nodes_stubs.items():
                 self.replicate_log(self.id, follower_id)
@@ -348,7 +371,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 try:
                     log_response = stub.SendLogs(raft_pb2.LogRequest(term=self.current_term,
                                         leader_id=leader_id,
-                                        prev_log_index=prefix_length-1,
+                                        prev_log_index=prefix_length,
                                         prev_log_term=prefix_term,
                                         logs=suffix,
                                         leader_commit_index=self.commit_length))
@@ -405,9 +428,12 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             if self.log[index].term != suffix[index - prefix_length].term:
                 self.log = [self.log[i] for i in range(prefix_length - 1)]
 
+        print(prefix_length, len(suffix), len(self.log))
         if prefix_length + len(suffix) > len(self.log):
             for i in range(len(self.log) - prefix_length, len(suffix) - 1):
+                print('Appending this thing', suffix[i])
                 self.log.append(suffix[i])
+                self.write_logs("{} {}".format(suffix[i].msg, suffix[i].term))
 
         if leader_commit > self.commit_length:
             for i in range(self.commit_length, leader_commit - 1):
@@ -415,6 +441,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 pass
             self.commit_length = leader_commit
             self.write_metadata()
+            self.update_db_state()
 
     def DetermineFollowerAcks(self, request, context):
         length = request.length
