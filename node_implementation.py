@@ -93,8 +93,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.voters = [self.id]
         vote_request = {
             "term": self.current_term,
-            "candidate_id": self.id,
-            "last_log_index": len(self.log) - 1,
+            "candidate_id": self.id,    
+            "last_log_index": len(self.log),
             "last_log_term": self.log[-1].term if len(self.log) > 0 else 0
         }
         for node, stub in self.other_nodes_stubs.items():
@@ -198,7 +198,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         if len(self.log) > 0:
             last_term = self.log[-1].term
         
-        logOk = cLogTerm > last_term or (cLogTerm == last_term and cLogLength >= len(self.log) - 1)
+        logOk = cLogTerm > last_term or (cLogTerm == last_term and cLogLength >= len(self.log))
 
         if cTerm == self.current_term and (self.voted_for is None or self.voted_for == cId) and logOk:
             self.voted_for = cId
@@ -297,18 +297,14 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.reset_election_timeout()
 
 
-        # print(self.log, request.prev_log_index, request.prev_log_term, request.logs, request.leader_commit_index)
-        flag = len(self.log) > request.prev_log_index and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
-        print(request.logs, flag)
-        if ((request.term == self.current_term) and flag):
-            print(request.prev_log_index)
-            flag = len(self.log) > (request.prev_log_index) and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
-
+        print(self.log, request.prev_log_index, request.prev_log_term, request.logs, request.leader_commit_index)
+        flag = len(self.log) >= request.prev_log_index and (request.prev_log_index <= 0 or self.log[request.prev_log_index-1].term == request.prev_log_term)
+        print(request.term , self.current_term , flag)
         if request.term == self.current_term and flag:
             # append log entries
             print(f"Server {self.id}: Appending log entries with log size {len(self.log)}")
             self.append_log_entries(request.prev_log_index, request.leader_commit_index, request.logs)
-            ack = min(len(self.log), request.prev_log_index + len(request.logs))  # original pseudocode does not use min
+            ack = request.prev_log_index + len(request.logs)  # original pseudocode does not use min
 
             ret_args = {
                 "follower_id": request.leader_id,
@@ -359,7 +355,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         """
         prefix_length = self.sent_length[follower_id]
         suffix = self.log[prefix_length:]
-        print(f"Server {self.id}: Replicating log entries to server {follower_id} with prefix length {prefix_length} and suffix {suffix}")
+        # print(f"Server {self.id}: Replicating log entries to server {follower_id} with prefix length {prefix_length} and suffix {suffix}")
         prefix_term = 0
 
         if prefix_length > 0:
@@ -422,13 +418,12 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             leader_commit: Something I will have to confirm later
             suffix: Remaining log entries
         """
-        print(f"Server {self.id}: Appending log entries with suffix {suffix}")
+        print(f"Server {self.id}: The prefix length is {prefix_length} and the suffix is {suffix} and the log length is {len(self.log)}")
         if (len(suffix) > 0) and (len(self.log) > prefix_length):
             index = min(len(self.log), prefix_length + len(suffix)) - 1
             if self.log[index].term != suffix[index - prefix_length].term:
                 self.log = [self.log[i] for i in range(prefix_length - 1)]
 
-        print(prefix_length, len(suffix), len(self.log))
         if prefix_length + len(suffix) > len(self.log):
             for i in range(len(self.log) - prefix_length, len(suffix) - 1):
                 print('Appending this thing', suffix[i])
