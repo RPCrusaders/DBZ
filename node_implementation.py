@@ -45,6 +45,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         # the point of DBZ
         self.db_hashmap: Dict[str, str] = {}
 
+        self.leader_lease_timeout = None
+        self.lease_start_time = None
+
+
     def reset_election_timeout(self):
         self.stop_election_timer() # Stop the election timer if it's running
         self.election_timeout = random.randint(self.timeout_min, self.timeout_max) / 1000.0 #Set a new random election timeout
@@ -59,6 +63,18 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         if self.election_timer:
             # print(f"Server {self.id}: Election timer stopped")
             self.election_timer.cancel()
+
+    def start_lease_timer(self):
+        self.leader_lease_timeout = 3000 # 3 seconds
+        self.lease_start_time = time.time()
+    
+    def stop_lease_timer(self):
+        self.leader_lease_timeout = None
+        self.lease_start_time = None
+
+    def reset_lease_timer(self):
+        self.stop_lease_timer()
+        self.start_lease_timer()
         
     def write_dump(self, message):
         file_path = f"./log_nodes_{self.id}"
@@ -84,6 +100,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             "last_log_index": len(self.log) - 1,
             "last_log_term": self.log[-1].term if len(self.log) > 0 else 0
         }
+        old_leader_lease_timeout = 0
         for node, stub in self.other_nodes_stubs.items():
             if node == self.id:
                 continue
@@ -96,6 +113,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     self.voters.append(response.node_id)
                 else:
                     self.write_dump(f"Node {self.id} did not receive vote from {response.node_id} for term {response.term}")
+
+                if response.node_id == self.current_leader:
+                    old_leader_lease_timeout = response.old_leader_lease_timeout
+
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
                     # currently can't tell which request failed, can add that later
@@ -105,16 +126,26 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     self.write_dump(f"Error while sending RPC request to: {node}")
                     # assuming the down node is not a candidate
                     self.votes_received += 1
-        
-                        # break
+                else:
+                    print(rpc_error)
+                    print(rpc_error.details())
+        # time.sleep(1)
         required_votes = ceil((len(self.other_nodes_stubs)+2) / 2)
         # print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
         if self.votes_received >= required_votes:
+            if old_leader_lease_timeout > 0:
+                remaining_lease_time = old_leader_lease_timeout - (time.time() - self.lease_start_time)
+                if remaining_lease_time > 0:
+                    print(f"Server {self.id}: Remaining lease time: {remaining_lease_time}")
+                    time.sleep(remaining_lease_time)
+            self.write_dump(f"Server {self.id}: Acquired lease. Continuing as leader.")
+
             self.write_dump(f"Server {self.id}: Election successful. Received {self.votes_received} votes. Needed {required_votes} votes.")
             self.current_role = Role.LEADER
             self.current_leader = self.id
             self.sent_length[self.id] = len(self.log)
             self.acked_length[self.id] = len(self.log)
+            self.reset_lease_timer()
             for node, stub in self.other_nodes_stubs.items():
                 if node == self.id:
                     continue
@@ -149,15 +180,16 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             None
         """
         while self.current_role == Role.LEADER:
-                        #sleep for 0.3 of the minimum timeout
             self.write_dump(f"Sending heartbeats to all followers.")
+            self.reset_lease_timer()
             for follower_id, stub in self.other_nodes_stubs.items():
                 if follower_id == self.id:
                     continue
                 self.replicate_log(self.id, follower_id)
-                time.sleep(self.timeout_min * 0.3 / 1000.0)
-                if self.current_role != Role.LEADER:
-                    self.write_dump(f"Stepping down.")
+            #sleep for 0.3 of the minimum timeout
+            time.sleep(self.timeout_min * 0.3 / 1000.0)
+            if self.current_role != Role.LEADER:
+                self.write_dump(f"Stepping down.")
 
     # RPC related section
     def RequestVote(self, request, context):
@@ -167,7 +199,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             request:VoteRequest = {term:int, candidate_id:int, last_log_index:int, last_log_term:int}
             context:Any, is part of gRPC internals
         Returns:
-            ret_args:VoteReply = {term:int, vote_granted:bool}
+            ret_args:VoteResponse = {node_id:int, term:int, vote_granted:bool, old_leader_lease_timeout:float}
         TODO: Update this docstring when the voting functionality has been added. We like documentation.
         """
         self.stop_election_timer()
@@ -190,19 +222,26 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         
         logOk = cLogTerm > last_term or (cLogTerm == last_term and cLogLength >= len(self.log) - 1)
 
+        if self.leader_lease_timeout is not None:
+            remaining_lease_time = self.leader_lease_timeout - (time.time() - self.lease_start_time)
+        else:
+            remaining_lease_time = 0
+
         if cTerm == self.current_term and (self.voted_for is None or self.voted_for == cId) and logOk:
             self.voted_for = cId
             ret_args = {
                 "term": cTerm,
                 "node_id": self.id,
-                "vote_granted": True
+                "vote_granted": True,
+                "old_leader_lease_timeout": remaining_lease_time
             }
             self.write_dump(f"Voted for {cId} in term {cTerm}")
         else:
             ret_args = {
                 "term": cTerm,
                 "node_id": self.id,
-                "vote_granted": False
+                "vote_granted": False,
+                "old_leader_lease_timeout": remaining_lease_time
             }
             self.write_dump(f"Did not vote for {cId} in term {cTerm}")
 
@@ -243,9 +282,12 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         Method used for heartbeats and log updating.
         Use this method to make decisions on when the node receives a LogRequest request.
         Args:
-            request:LogRequest = {term:int, leader_id:int, prev_log_index:int, prev_log_term:int,
-             logs:List[raft_pb2.LogEntry: {term:int, msg:str}]
-             ,leader_commit_index:int}
+            request:LogRequest = {
+                term:int, leader_id:int, prev_log_index:int, prev_log_term:int,
+                logs:List[raft_pb2.LogEntry: {term:int, msg:str}],
+                leader_commit_index:int,
+                leader_lease_timeout:float
+            }
             context:Any, is part of gRPC internals
         Returns:
             ret_args:LogResponse = {follower_id:int, term:int, acked_length:int, success:bool}
@@ -263,8 +305,9 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.current_role = Role.FOLLOWER
             self.current_leader = request.leader_id
 
-        #Reset election timer
-        self.reset_election_timeout()
+        # Follower updates its lease timer
+        self.leader_lease_timeout = request.leader_lease_timeout
+        self.lease_start_time = time.time()
 
         flag = len(self.log) > request.prev_log_index and (request.prev_log_index < 0 or self.log[request.prev_log_index].term == request.prev_log_term)
         if request.term == self.current_term and flag:
@@ -328,6 +371,16 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             prefix_term = self.log[prefix_length - 1].term
 
         # Send LogRequest to follower
+        remaining_lease_time = self.leader_lease_timeout - (time.time() - self.lease_start_time)
+        if remaining_lease_time <= 0:
+            self.write_dump(f"Server {self.id}: Lease expired. Stepping down.")
+            self.current_role = Role.FOLLOWER
+            self.voted_for = None
+            self.stop_lease_timer()
+            self.start_election_timer()
+            return
+
+        self.reset_lease_timer()
         for _follower_id, stub in self.other_nodes_stubs.items():
             if _follower_id == follower_id:
                 try:
@@ -336,7 +389,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                                         prev_log_index=prefix_length,
                                         prev_log_term=prefix_term,
                                         logs=suffix,
-                                        leader_commit_index=self.commit_length))
+                                        leader_commit_index=self.commit_length,
+                                        leader_lease_timeout=self.leader_lease_timeout))
                     print(f"Server {self.id}: Sent LogRequest to server {follower_id}")
                     self._receive_log_response(log_response)
                 except grpc.RpcError as rpc_error:
