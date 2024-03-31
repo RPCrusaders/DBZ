@@ -64,7 +64,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.election_timer.cancel()
 
     def start_lease_timer(self):
-        self.leader_lease_timeout = 2000 # 2 seconds
+        self.leader_lease_timeout = 3000 # 3 seconds
         self.lease_start_time = time.time()
     
     def stop_lease_timer(self):
@@ -99,6 +99,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             "last_log_index": len(self.log) - 1,
             "last_log_term": self.log[-1].term if len(self.log) > 0 else 0
         }
+        old_leader_lease_timeout = 0
         for node, stub in self.other_nodes_stubs.items():
             if node == self.id:
                 continue
@@ -124,23 +125,26 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     self.write_dump(f"Error while sending RPC request to: {node}")
                     # assuming the down node is not a candidate
                     self.votes_received += 1
-        
-                        # break
+                else:
+                    print(rpc_error)
+                    print(rpc_error.details())
+        # time.sleep(1)
         required_votes = ceil((len(self.other_nodes_stubs)+2) / 2)
         # print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
         if self.votes_received >= required_votes:
-            
-            remaining_lease_time = old_leader_lease_timeout - (time.time() - self.lease_start_time)
-            print(f"Server {self.id}: Remaining lease time: {remaining_lease_time}")
-            if remaining_lease_time > 0:
-                time.sleep(remaining_lease_time)
-            print(f"Server {self.id}: Acquired lease. Continuing as leader.")
+            if old_leader_lease_timeout > 0:
+                remaining_lease_time = old_leader_lease_timeout - (time.time() - self.lease_start_time)
+                if remaining_lease_time > 0:
+                    print(f"Server {self.id}: Remaining lease time: {remaining_lease_time}")
+                    time.sleep(remaining_lease_time)
+            self.write_dump(f"Server {self.id}: Acquired lease. Continuing as leader.")
 
             self.write_dump(f"Server {self.id}: Election successful. Received {self.votes_received} votes. Needed {required_votes} votes.")
             self.current_role = Role.LEADER
             self.current_leader = self.id
             self.sent_length[self.id] = len(self.log)
             self.acked_length[self.id] = len(self.log)
+            self.reset_lease_timer()
             for node, stub in self.other_nodes_stubs.items():
                 if node == self.id:
                     continue
@@ -148,7 +152,6 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 self.acked_length[node] = 0
                 self.replicate_log(self.id, node)
             self.stop_election_timer()
-            self.reset_lease_timer()
 
             ## leader routine
             self.LeaderRoutine()
@@ -219,7 +222,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         
         logOk = cLogTerm > last_term or (cLogTerm == last_term and cLogLength >= len(self.log) - 1)
 
-        remaining_lease_time = self.leader_lease_timeout - (time.time() - self.lease_start_time)
+        if self.leader_lease_timeout is not None:
+            remaining_lease_time = self.leader_lease_timeout - (time.time() - self.lease_start_time)
+        else:
+            remaining_lease_time = 0
 
         if cTerm == self.current_term and (self.voted_for is None or self.voted_for == cId) and logOk:
             self.voted_for = cId
@@ -364,10 +370,11 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         # Send LogRequest to follower
         remaining_lease_time = self.leader_lease_timeout - (time.time() - self.lease_start_time)
         if remaining_lease_time <= 0:
-            print(f"Server {self.id}: Lease expired. Stepping down.")
+            self.write_dump(f"Server {self.id}: Lease expired. Stepping down.")
             self.current_role = Role.FOLLOWER
             self.voted_for = None
             self.stop_lease_timer()
+            self.start_election_timer()
             return
 
         self.reset_lease_timer()

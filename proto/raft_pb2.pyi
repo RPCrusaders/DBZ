@@ -18,30 +18,34 @@ class VoteRequest(_message.Message):
     def __init__(self, term: _Optional[int] = ..., candidate_id: _Optional[int] = ..., last_log_index: _Optional[int] = ..., last_log_term: _Optional[int] = ...) -> None: ...
 
 class VoteResponse(_message.Message):
-    __slots__ = ("node_id", "term", "vote_granted")
+    __slots__ = ("node_id", "term", "vote_granted", "old_leader_lease_timeout")
     NODE_ID_FIELD_NUMBER: _ClassVar[int]
     TERM_FIELD_NUMBER: _ClassVar[int]
     VOTE_GRANTED_FIELD_NUMBER: _ClassVar[int]
+    OLD_LEADER_LEASE_TIMEOUT_FIELD_NUMBER: _ClassVar[int]
     node_id: int
     term: int
     vote_granted: bool
-    def __init__(self, node_id: _Optional[int] = ..., term: _Optional[int] = ..., vote_granted: bool = ...) -> None: ...
+    old_leader_lease_timeout: float
+    def __init__(self, node_id: _Optional[int] = ..., term: _Optional[int] = ..., vote_granted: bool = ..., old_leader_lease_timeout: _Optional[float] = ...) -> None: ...
 
 class LogRequest(_message.Message):
-    __slots__ = ("term", "leader_id", "prev_log_index", "prev_log_term", "logs", "leader_commit_index")
+    __slots__ = ("term", "leader_id", "prev_log_index", "prev_log_term", "logs", "leader_commit_index", "leader_lease_timeout")
     TERM_FIELD_NUMBER: _ClassVar[int]
     LEADER_ID_FIELD_NUMBER: _ClassVar[int]
     PREV_LOG_INDEX_FIELD_NUMBER: _ClassVar[int]
     PREV_LOG_TERM_FIELD_NUMBER: _ClassVar[int]
     LOGS_FIELD_NUMBER: _ClassVar[int]
     LEADER_COMMIT_INDEX_FIELD_NUMBER: _ClassVar[int]
+    LEADER_LEASE_TIMEOUT_FIELD_NUMBER: _ClassVar[int]
     term: int
     leader_id: int
     prev_log_index: int
     prev_log_term: int
     logs: _containers.RepeatedCompositeFieldContainer[LogEntry]
     leader_commit_index: int
-    def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prev_log_index: _Optional[int] = ..., prev_log_term: _Optional[int] = ..., logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., leader_commit_index: _Optional[int] = ...) -> None: ...
+    leader_lease_timeout: float
+    def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prev_log_index: _Optional[int] = ..., prev_log_term: _Optional[int] = ..., logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., leader_commit_index: _Optional[int] = ..., leader_lease_timeout: _Optional[float] = ...) -> None: ...
 
 class LogResponse(_message.Message):
     __slots__ = ("follower_id", "term", "acked_length", "success")
