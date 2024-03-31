@@ -30,7 +30,6 @@ class DBZClient:
                 self.run = False
                 break
             request = " ".join(request)
-            print(request)
             self.request_server(request)
 
     def request_server(self, request: str):

@@ -1,1 +1,0 @@
-chutiye logging kaun likhega

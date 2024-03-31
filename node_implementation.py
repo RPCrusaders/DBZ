@@ -4,11 +4,9 @@ from collections import namedtuple
 from math import ceil
 from typing import List, Dict
 import time
-import os
 
 from pathlib import Path
 
-import roles
 from proto import raft_pb2, raft_pb2_grpc
 from roles import Role
 
@@ -70,11 +68,27 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             dump_file.write(message + "\n")
         print(f"Server {self.id}: {message}")
 
+    def write_metadata(self):
+        file_path = f"./log_nodes_{self.id}"
+        Path(file_path).mkdir(parents=True, exist_ok=True)
+        # store metadata as commit_length(\n)term(\n)nodeId_voted_for
+        with open(f"log_nodes_{self.id}/metadata.txt", "w") as metadata_file:
+            metadata_file.write("{}\n{}\n{}".format(self.commit_length, self.current_term, self.voted_for))
+
+    def write_logs(self, message):
+        file_path = f"./log_nodes_{self.id}"
+        Path(file_path).mkdir(parents=True, exist_ok=True)
+        with open(f"log_nodes_{self.id}/logs.txt", "a") as logs_file:
+            logs_file.write(message + "\n")
+        print(f"Server {self.id}: {message}")
+
     def start_election(self):
         self.write_dump(f"Election timeout expired. Starting election...")
         self.stop_election_timer()
         self.current_term += 1
         self.voted_for = self.id
+        self.write_metadata()
+
         self.current_role = Role.CANDIDATE
         self.votes_received = 1
         self.voters = [self.id]
@@ -98,15 +112,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     self.write_dump(f"Node {self.id} did not receive vote from {response.node_id} for term {response.term}")
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                    # currently can't tell which request failed, can add that later
-                    # by changing type of other_nodes to dict instead of set
-                    # print(rpc_error.details())
-                    # print(rpc_error)
                     self.write_dump(f"Error while sending RPC request to: {node}")
                     # assuming the down node is not a candidate
                     self.votes_received += 1
-        
-                        # break
+
         required_votes = ceil((len(self.other_nodes_stubs)+2) / 2)
         # print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
         if self.votes_received >= required_votes:
@@ -178,7 +187,9 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
         if cTerm > self.current_term:
             self.current_term = cTerm
+            self.write_metadata()
             self.voted_for = None
+            self.write_metadata()
             self.current_role = Role.FOLLOWER
             self.stop_election_timer()
             print(f"Server {self.id}: Updated term to {cTerm} and voted for {cId}")
@@ -197,6 +208,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 "node_id": self.id,
                 "vote_granted": True
             }
+            self.write_metadata()
             self.write_dump(f"Voted for {cId} in term {cTerm}")
         else:
             ret_args = {
@@ -214,13 +226,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         """
         Method for handling client requests.
         """
-        # gRPC-py is trash WHAT DO YOU MEAN FAILED TO SERIALISE RESPONSE WHEN THE FRICKIN
-        # ERROR WAS IN THE REQUEST
         if self.current_role is not Role.LEADER:
             return raft_pb2.ClientReply(data='', leader_id=self.current_leader, success=False)
 
         request_string = request.request
-        print('Serving the request {}'.format(request_string))
         request_string = request_string.split(' ')
 
         # GET K
@@ -229,6 +238,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             data = self.db_hashmap.get(key)
             if data is None:
                 data = ""
+            self.write_logs("{} {}".format(request.request, self.current_term))
             return raft_pb2.ClientReply(data=data, leader_id=self.current_leader, success=True)
         # SET K V
         elif request_string[0] == 'SET':
@@ -236,6 +246,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             value = request_string[2]
             self.db_hashmap[key] = value
             data = 'Successfully set {} to {}'.format(key, value)
+            self.write_logs("{} {}".format(request.request, self.current_term))
             return raft_pb2.ClientReply(data=data, leader_id=self.current_leader, success=True)
 
     def SendLogs(self, request, context):
@@ -256,6 +267,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.current_term = request.term
             # self.current_role = Role.FOLLOWER
             self.voted_for = None
+            self.write_metadata()
             # cancel election timer
             self.stop_election_timer()
         
@@ -286,7 +298,6 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 "acked_length": 0,
                 "success": False
             }
-
         return raft_pb2.LogResponse(**ret_args)
 
     def broadcast(self, message):
@@ -366,8 +377,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
         elif log_response.term > self.current_term:
             self.current_term = log_response.term
+            self.write_metadata()
             self.current_role = Role.FOLLOWER
             self.voted_for = None
+            self.write_metadata()
             self.stop_election_timer()
 
     def append_log_entries(self, prefix_length: int, leader_commit: int, suffix):
@@ -392,6 +405,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 # TODO: deliver self.log[i] to application (?)
                 pass
             self.commit_length = leader_commit
+            self.write_metadata()
 
     def DetermineFollowerAcks(self, request, context):
         length = request.length
@@ -423,3 +437,4 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 # TODO: deliver self.log[i] to application (?)
                 pass
             self.commit_length = max(ready)
+            self.write_metadata()
