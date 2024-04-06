@@ -3,18 +3,15 @@
 Hey, I head your database is strong. Let me fight it!
 
 ## Usage
-`python3 node.py --id <node id> --address <ip:port>`
-  - You can invoke `python3 node.py --help` to see launch options.
+`python3 node_runner.py --id <node id> --address <ip:port>`
+  - You can invoke `python3 node_runner.py --help` to see launch options.
 
 ## Developer Notes
 
-### node.py
-- contains code for _sending_ the required RPC requests. Clearly this will require multithreading.
-- RPC requests to dead nodes can now be simulated without the system
-falling apart thanks to try-catch.
-- Please make use of the information that is returned through the `response` variable and proceed further in the algorithm.
+### node_runner.py
+- the entrypoint for the Raft nodes
 
-### node_implementation.py
+### node.py
 - contains the canonical Node class.
 - inherits the correct gRPC class for handling RPC requests.
 - contains code for _handling_ the event that an RPC request comes to the node. 
