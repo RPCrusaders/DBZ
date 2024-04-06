@@ -1,7 +1,6 @@
 import random
 from typing import Dict
 from grpc import StatusCode, RpcError
-
 from proto import raft_pb2_grpc, raft_pb2
 from raft_init import get_node_stubs_other_than, confirm
 
@@ -46,7 +45,7 @@ class DBZClient:
                     return
                 # if I heard that the leader is None, well. This control branch is probably not
                 # going to be called, though.
-                if response.leader_id is None:
+                if response.leader_id == -1:
                     print('DBZError!')
                     self.current_leader_id = random.randint(1, len(self.nodes_and_stubs))
                     return

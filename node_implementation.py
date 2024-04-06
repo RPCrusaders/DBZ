@@ -32,7 +32,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
         # Volatile state on all servers
         self.current_role = Role.FOLLOWER
-        self.current_leader = None
+        self.current_leader = -1
         self.votes_received = 0
         self.sent_length = {}
         self.acked_length = {}
@@ -113,7 +113,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
                     self.write_dump(f"Error while sending RPC request to: {node}")
                     # assuming the down node is not a candidate
-                    self.votes_received += 1
+                    # self.votes_received += 1
 
         required_votes = ceil((len(self.other_nodes_stubs)+1) / 2)
         # print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
@@ -130,16 +130,18 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 self.acked_length[node] = 0
                 self.replicate_log(self.id, node)
             self.stop_election_timer()
+            self.current_role = Role.LEADER
 
             # leader routine
             self.LeaderRoutine()
 
         else:
-            self.write_dump(f"Election failed. Received {self.votes_received} votes. Needed {len(self.other_nodes_stubs)+1 // 2} votes.")
+            self.write_dump(f"Election failed. Received {self.votes_received} votes. Needed {required_votes} votes.")
             # self.current_term = old_term
             self.current_role = Role.FOLLOWER
             self.voted_for = -1
             self.stop_election_timer()
+            self.current_leader = -1
             # self.reset_election_timeout()
             # self.start_election_timer()
         return
@@ -225,6 +227,8 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         """
         Method for handling client requests.
         """
+        print(f"Server {self.id}, role: {self.current_role}, leader: {self.current_leader}, term: {self.current_term}")
+
         if self.current_role is not Role.LEADER:
             return raft_pb2.ClientReply(data='', leader_id=self.current_leader, success=False)
 
