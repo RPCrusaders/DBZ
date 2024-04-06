@@ -1,10 +1,8 @@
 from threading import Thread
 import time
-import grpc
 import argparse
 
 from node_implementation import Node
-from proto import raft_pb2
 from raft_init import confirm, serve, get_node_stubs_other_than
 
 

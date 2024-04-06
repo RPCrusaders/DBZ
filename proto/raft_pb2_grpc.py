@@ -37,8 +37,8 @@ class RaftServiceStub(object):
                 )
         self.BroadcastMsg = channel.unary_unary(
                 '/RaftService/BroadcastMsg',
-                request_serializer=raft__pb2.broadcasted_msg.SerializeToString,
-                response_deserializer=raft__pb2.broadcast_response.FromString,
+                request_serializer=raft__pb2.BroadcastedMsg.SerializeToString,
+                response_deserializer=raft__pb2.BroadcastResponse.FromString,
                 )
 
 
@@ -101,8 +101,8 @@ def add_RaftServiceServicer_to_server(servicer, server):
             ),
             'BroadcastMsg': grpc.unary_unary_rpc_method_handler(
                     servicer.BroadcastMsg,
-                    request_deserializer=raft__pb2.broadcasted_msg.FromString,
-                    response_serializer=raft__pb2.broadcast_response.SerializeToString,
+                    request_deserializer=raft__pb2.BroadcastedMsg.FromString,
+                    response_serializer=raft__pb2.BroadcastResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -195,7 +195,7 @@ class RaftService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/RaftService/BroadcastMsg',
-            raft__pb2.broadcasted_msg.SerializeToString,
-            raft__pb2.broadcast_response.FromString,
+            raft__pb2.BroadcastedMsg.SerializeToString,
+            raft__pb2.BroadcastResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

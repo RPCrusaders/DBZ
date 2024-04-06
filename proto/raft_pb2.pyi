@@ -6,16 +6,16 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class VoteRequest(_message.Message):
-    __slots__ = ("term", "candidate_id", "last_log_index", "last_log_term")
-    TERM_FIELD_NUMBER: _ClassVar[int]
-    CANDIDATE_ID_FIELD_NUMBER: _ClassVar[int]
-    LAST_LOG_INDEX_FIELD_NUMBER: _ClassVar[int]
-    LAST_LOG_TERM_FIELD_NUMBER: _ClassVar[int]
-    term: int
-    candidate_id: int
-    last_log_index: int
-    last_log_term: int
-    def __init__(self, term: _Optional[int] = ..., candidate_id: _Optional[int] = ..., last_log_index: _Optional[int] = ..., last_log_term: _Optional[int] = ...) -> None: ...
+    __slots__ = ("c_term", "c_id", "c_log_length", "c_log_term")
+    C_TERM_FIELD_NUMBER: _ClassVar[int]
+    C_ID_FIELD_NUMBER: _ClassVar[int]
+    C_LOG_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    C_LOG_TERM_FIELD_NUMBER: _ClassVar[int]
+    c_term: int
+    c_id: int
+    c_log_length: int
+    c_log_term: int
+    def __init__(self, c_term: _Optional[int] = ..., c_id: _Optional[int] = ..., c_log_length: _Optional[int] = ..., c_log_term: _Optional[int] = ...) -> None: ...
 
 class VoteResponse(_message.Message):
     __slots__ = ("node_id", "term", "vote_granted")
@@ -28,20 +28,20 @@ class VoteResponse(_message.Message):
     def __init__(self, node_id: _Optional[int] = ..., term: _Optional[int] = ..., vote_granted: bool = ...) -> None: ...
 
 class LogRequest(_message.Message):
-    __slots__ = ("term", "leader_id", "prev_log_index", "prev_log_term", "logs", "leader_commit_index")
+    __slots__ = ("term", "leader_id", "prefix_length", "prefix_term", "logs", "leader_commit_index")
     TERM_FIELD_NUMBER: _ClassVar[int]
     LEADER_ID_FIELD_NUMBER: _ClassVar[int]
-    PREV_LOG_INDEX_FIELD_NUMBER: _ClassVar[int]
-    PREV_LOG_TERM_FIELD_NUMBER: _ClassVar[int]
+    PREFIX_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    PREFIX_TERM_FIELD_NUMBER: _ClassVar[int]
     LOGS_FIELD_NUMBER: _ClassVar[int]
     LEADER_COMMIT_INDEX_FIELD_NUMBER: _ClassVar[int]
     term: int
     leader_id: int
-    prev_log_index: int
-    prev_log_term: int
+    prefix_length: int
+    prefix_term: int
     logs: _containers.RepeatedCompositeFieldContainer[LogEntry]
     leader_commit_index: int
-    def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prev_log_index: _Optional[int] = ..., prev_log_term: _Optional[int] = ..., logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., leader_commit_index: _Optional[int] = ...) -> None: ...
+    def __init__(self, term: _Optional[int] = ..., leader_id: _Optional[int] = ..., prefix_length: _Optional[int] = ..., prefix_term: _Optional[int] = ..., logs: _Optional[_Iterable[_Union[LogEntry, _Mapping]]] = ..., leader_commit_index: _Optional[int] = ...) -> None: ...
 
 class LogResponse(_message.Message):
     __slots__ = ("follower_id", "term", "acked_length", "success")
@@ -89,7 +89,7 @@ class FollowerAckResponse(_message.Message):
     committed_length: int
     def __init__(self, committed_length: _Optional[int] = ...) -> None: ...
 
-class broadcasted_msg(_message.Message):
+class BroadcastedMsg(_message.Message):
     __slots__ = ("term", "candidate_id", "last_log_index", "last_log_term")
     TERM_FIELD_NUMBER: _ClassVar[int]
     CANDIDATE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -101,7 +101,7 @@ class broadcasted_msg(_message.Message):
     last_log_term: int
     def __init__(self, term: _Optional[int] = ..., candidate_id: _Optional[int] = ..., last_log_index: _Optional[int] = ..., last_log_term: _Optional[int] = ...) -> None: ...
 
-class broadcast_response(_message.Message):
+class BroadcastResponse(_message.Message):
     __slots__ = ("success",)
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
     success: bool
