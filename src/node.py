@@ -4,11 +4,11 @@ from collections import namedtuple
 from math import ceil
 from typing import List, Dict
 import time
-from pathlib import Path
 import grpc
-
+from .dbz_logger import DBZLogger
+from pathlib import Path
 from proto import raft_pb2, raft_pb2_grpc
-from roles import Role
+from .roles import Role
 
 log_entry = namedtuple('log_entry', ['msg', 'term'])
 
@@ -35,10 +35,13 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         self.sent_length = {}
         self.acked_length = {}
 
+        #logger
+        self.logger = DBZLogger(self.id)
         self.other_nodes_stubs = {}
 
         # the point of DBZ
         self.db_hashmap: Dict[str, str] = {}
+        self.init_db_state()
 
     def reset_election_timeout(self):
         self.stop_election_timer()  # Stop the election timer if it's running
@@ -56,45 +59,21 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             # print(f"Server {self.id}: Election timer stopped")
             self.election_timer.cancel()
 
-    def write_dump(self, message):
-        file_path = f"./log_nodes_{self.id}"
-        # Make sure the directory exists
-        Path(file_path).mkdir(parents=True, exist_ok=True)
-        # Write the message to the file
-
-        with open(f"log_nodes_{self.id}/dump.txt", "a") as dump_file:
-            dump_file.write(message + "\n")
-        print(f"Server {self.id}: {message}")
-
-    def write_metadata(self):
-        file_path = f"./log_nodes_{self.id}"
-        Path(file_path).mkdir(parents=True, exist_ok=True)
-        # store metadata as commit_length(\n)term(\n)nodeId_voted_for
-        with open(f"log_nodes_{self.id}/metadata.txt", "w") as metadata_file:
-            metadata_file.write("{}\n{}\n{}".format(self.commit_length, self.current_term, self.voted_for))
-
-    def write_logs(self, message):
-        file_path = f"./log_nodes_{self.id}"
-        Path(file_path).mkdir(parents=True, exist_ok=True)
-        with open(f"log_nodes_{self.id}/logs.txt", "a") as logs_file:
-            logs_file.write(message + "\n")
-        print(f"Server {self.id}: {message}")
-
     def start_election(self):
-        self.write_dump(f"Election timeout expired. Starting election...")
+        self.logger.write_dump(f"Election timeout expired. Starting election...")
         self.stop_election_timer()
         self.current_term += 1
         self.voted_for = self.id
-        self.write_metadata()
+        self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
 
         self.current_role = Role.CANDIDATE
         self.votes_received = 1
         self.voters = [self.id]
         vote_request = {
-            "term": self.current_term,
-            "candidate_id": self.id,
-            "last_log_index": len(self.log),
-            "last_log_term": self.log[-1].term if len(self.log) > 0 else 0
+            "c_term": self.current_term,
+            "c_id": self.id,
+            "c_log_length": len(self.log),
+            "c_log_term": self.log[-1].term if len(self.log) > 0 else 0
         }
         for node, stub in self.other_nodes_stubs.items():
             if node == self.id:
@@ -108,18 +87,18 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
                     self.voters.append(response.node_id)
                 else:
-                    self.write_dump(
+                    self.logger.write_dump(
                         f"Node {self.id} did not receive vote from {response.node_id} for term {response.term}")
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                    self.write_dump(f"Error while sending RPC request to: {node}")
+                    self.logger.write_dump(f"Error while sending RPC request to: {node}")
                     # assuming the down node is not a candidate
                     self.votes_received += 1
 
         required_votes = ceil((len(self.other_nodes_stubs) + 1) / 2)
         # print(f"Server {self.id}: Received {self.votes_received} votes. Needed {required_votes} votes.")
         if self.votes_received >= required_votes:
-            self.write_dump(
+            self.logger.write_dump(
                 f"Server {self.id}: Election successful. Received {self.votes_received} votes. Needed {required_votes} votes.")
             self.current_role = Role.LEADER
             self.current_leader = self.id
@@ -137,7 +116,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.LeaderRoutine()
 
         else:
-            self.write_dump(
+            self.logger.write_dump(
                 f"Election failed. Received {self.votes_received} votes. Needed {len(self.other_nodes_stubs) + 1 // 2} votes.")
             # self.current_term = old_term
             self.current_role = Role.FOLLOWER
@@ -161,14 +140,14 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         """
         while self.current_role == Role.LEADER:
             # sleep for 0.3 of the minimum timeout
-            self.write_dump(f"Sending heartbeats to all followers.")
+            self.logger.write_dump(f"Sending heartbeats to all followers.")
             for follower_id, stub in self.other_nodes_stubs.items():
                 if follower_id == self.id:
                     continue
                 self.replicate_log(self.id, follower_id)
                 time.sleep(self.timeout_min * 0.3 / 1000.0)
                 if self.current_role != Role.LEADER:
-                    self.write_dump(f"Stepping down.")
+                    self.logger.write_dump(f"Stepping down.")
 
     # RPC related section
     def RequestVote(self, request: raft_pb2.VoteRequest, context):
@@ -189,9 +168,9 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
         if cTerm > self.current_term:
             self.current_term = cTerm
-            self.write_metadata()
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
             self.voted_for = None
-            self.write_metadata()
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
             self.current_role = Role.FOLLOWER
             self.stop_election_timer()
             print(f"Server {self.id}: Updated term to {cTerm} and voted for {cId}")
@@ -210,15 +189,15 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 "node_id": self.id,
                 "vote_granted": True
             }
-            self.write_metadata()
-            self.write_dump(f"Voted for {cId} in term {cTerm}")
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
+            self.logger.write_dump(f"Voted for {cId} in term {cTerm}")
         else:
             ret_args = {
                 "term": cTerm,
                 "node_id": self.id,
                 "vote_granted": False
             }
-            self.write_dump(f"Did not vote for {cId} in term {cTerm}")
+            self.logger.write_dump(f"Did not vote for {cId} in term {cTerm}")
 
         self.reset_election_timeout()
         # self.start_election_timer()
@@ -235,13 +214,13 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
         request_string = request_string.split(' ')
 
         # GET K
-        self.write_dump(f"(Leader) Received request: {request_string}")
+        self.logger.write_dump(f"(Leader) Received request: {request_string}")
         if request_string[0] == 'GET':
             key = request_string[1]
             data = self.db_hashmap.get(key)
             if data is None:
                 data = ""
-            # self.write_logs("{} {}".format(request.request, self.current_term))
+            # self.logger.write_logs("{} {}".format(request.request, self.current_term))
             return raft_pb2.ClientReply(data=data, leader_id=self.current_leader, success=True)
         # SET K V
         elif request_string[0] == 'SET':
@@ -249,17 +228,20 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             value = request_string[2]
             self.db_hashmap[key] = value
             data = 'Successfully set {} to {}'.format(key, value)
-            self.write_logs("{} {}".format(request.request, self.current_term))
+            self.logger.write_logs("{} {}".format(request.request, self.current_term))
             self.log.append(raft_pb2.LogEntry(term=self.current_term, msg=request.request))
             return raft_pb2.ClientReply(data=data, leader_id=self.current_leader, success=True)
 
-    def update_db_state(self):
+    def init_db_state(self):
         file_path = f"./log_nodes_{self.id}"
         Path(file_path).mkdir(parents=True, exist_ok=True)
-        with open(f"log_nodes_{self.id}/logs.txt", "a") as logs_file:
-            history = logs_file.readlines()
-            for request in history:
-                self.execute_db_command(request)
+        try:
+            with open(f"log_nodes_{self.id}/logs.txt", "r") as logs_file:
+                history = logs_file.readlines()
+                for request in history:
+                    self.execute_db_command(request)
+        except:
+            print(f"FRESH AS A NEWBORN BABY: Server {self.id}")
 
     def execute_db_command(self, request: str):
         tokens = request.split(" ")
@@ -289,7 +271,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             self.current_term = request.term
             # self.current_role = Role.FOLLOWER
             self.voted_for = None
-            self.write_metadata()
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
             # cancel election timer
             self.stop_election_timer()
 
@@ -309,7 +291,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             # print(f"Server {self.id}: Appending log entries with log size {len(self.log)}")
             self.append_log_entries(request.prev_log_index, request.leader_commit_index, request.logs)
             ack = request.prev_log_index + len(request.logs)  # original pseudocode does not use min
-            self.write_dump(f"Log entries accepted from leader {request.leader_id}")
+            self.logger.write_dump(f"Log entries accepted from leader {request.leader_id}")
             ret_args = {
                 "follower_id": request.leader_id,
                 "term": request.term,
@@ -318,7 +300,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
             }
 
         else:
-            self.write_dump(f"Log entries rejected from leader {request.leader_id}")
+            self.logger.write_dump(f"Log entries rejected from leader {request.leader_id}")
             ret_args = {
                 "follower_id": request.leader_id,
                 "term": request.term,
@@ -382,11 +364,11 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     self._receive_log_response(log_response)
                 except grpc.RpcError as rpc_error:
                     if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                        self.write_dump(f"Error while sending RPC request to: {follower_id}")
+                        self.logger.write_dump(f"Error while sending RPC request to: {follower_id}")
                         self.sent_length[follower_id] = 0
                         self.acked_length[follower_id] = 0
                     # else:
-                    #     self.write_dump(f"Error while sending RPC request to: {follower_id}")
+                    #     self.logger.write_dump(f"Error while sending RPC request to: {follower_id}")
                     #     self.sent_length[follower_id] = 0
                     #     self.acked_length[follower_id] = 0
 
@@ -412,10 +394,10 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
 
         elif log_response.term > self.current_term:
             self.current_term = log_response.term
-            self.write_metadata()
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
             self.current_role = Role.FOLLOWER
             self.voted_for = None
-            self.write_metadata()
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
             self.stop_election_timer()
 
     def append_log_entries(self, prefix_length: int, leader_commit: int, suffix):
@@ -442,16 +424,15 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                     key = tmp[1]
                     value = tmp[2]
                     self.db_hashmap[key] = value
-                self.write_logs("{} {}".format(suffix[i].msg, suffix[i].term))
-                self.write_dump(f"Committing log entry (follower) {suffix[i].msg} with term {suffix[i].term}")
+                self.logger.write_logs("{} {}".format(suffix[i].msg, suffix[i].term))
+                self.logger.write_dump(f"Committing log entry (follower) {suffix[i].msg} with term {suffix[i].term}")
 
         if leader_commit > self.commit_length:
             for i in range(self.commit_length, leader_commit):
                 # TODO: deliver self.log[i] to application (?)
                 pass
             self.commit_length = leader_commit
-            self.write_metadata()
-            self.update_db_state()
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)
 
     def DetermineFollowerAcks(self, request: raft_pb2.FollowerAckRequest, context):
         return raft_pb2.FollowerAckResponse(self.commit_length)
@@ -467,7 +448,7 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 acks_len_set.add(response.committed_length)
             except grpc.RpcError as rpc_error:
                 if rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
-                    self.write_dump(f"Error while sending RPC request to: {node}")
+                    self.logger.write_dump(f"Error while sending RPC request to: {node}")
 
         for i in range(1, len(self.log)):
             counter = 0
@@ -483,4 +464,4 @@ class Node(raft_pb2_grpc.RaftServiceServicer):
                 # TODO: deliver self.log[i] to application (?)
                 pass
             self.commit_length = max(ready)
-            self.write_metadata()
+            self.logger.write_metadata(self.commit_length, self.current_term, self.voted_for)

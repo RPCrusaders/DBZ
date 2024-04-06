@@ -3,7 +3,7 @@ from typing import Dict
 from grpc import StatusCode, RpcError
 
 from proto import raft_pb2_grpc, raft_pb2
-from raft_init import get_node_stubs_other_than, confirm
+from src.raft_init import get_node_stubs_other_than, confirm
 
 
 class DBZClient:

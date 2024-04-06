@@ -2,8 +2,8 @@ from threading import Thread
 import time
 import argparse
 
-from node_implementation import Node
-from raft_init import confirm, serve, get_node_stubs_other_than
+from src.node import Node
+from src.raft_init import confirm, serve, get_node_stubs_other_than
 
 
 def parse_args():
