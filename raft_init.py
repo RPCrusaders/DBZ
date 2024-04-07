@@ -1,6 +1,6 @@
 # This makes the files cleaner but might make testing difficult
 
-from typing import Set
+from typing import Dict
 import grpc
 from concurrent import futures
 
@@ -8,23 +8,22 @@ from proto import raft_pb2_grpc
 
 
 addresses = {
-    'localhost:50051',
-    'localhost:50052',
-    'localhost:50053',
+    1: 'localhost:50051',
+    2: 'localhost:50052',
+    3: 'localhost:50053',
 }
 
 
-def get_node_stubs_other_than(current_node_address: str):
+def get_node_stubs_other_than(current_node_address: str, current_node:int):
     if current_node_address in addresses:
-        addresses.remove(current_node_address)
+        # addresses.remove(current_node_address)
+        del addresses[current_node]
 
-    stubs: Set = set()
-    for address in addresses:
+    stubs: Dict[int, raft_pb2_grpc.RaftServiceStub] = dict()
+    for node, address in addresses.items():
         channel = grpc.insecure_channel(target=address)
         stub = raft_pb2_grpc.RaftServiceStub(channel=channel)
-        stubs.add(stub)
-    
-    print("Addresses: ", addresses)
+        stubs[node] = stub
     return stubs
 
 

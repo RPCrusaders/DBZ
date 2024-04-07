@@ -35,6 +35,11 @@ class RaftServiceStub(object):
                 request_serializer=raft__pb2.FollowerAckRequest.SerializeToString,
                 response_deserializer=raft__pb2.FollowerAckResponse.FromString,
                 )
+        self.BroadcastMsg = channel.unary_unary(
+                '/RaftService/BroadcastMsg',
+                request_serializer=raft__pb2.broadcasted_msg.SerializeToString,
+                response_deserializer=raft__pb2.broadcast_response.FromString,
+                )
 
 
 class RaftServiceServicer(object):
@@ -65,6 +70,12 @@ class RaftServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def BroadcastMsg(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RaftServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -87,6 +98,11 @@ def add_RaftServiceServicer_to_server(servicer, server):
                     servicer.DetermineFollowerAcks,
                     request_deserializer=raft__pb2.FollowerAckRequest.FromString,
                     response_serializer=raft__pb2.FollowerAckResponse.SerializeToString,
+            ),
+            'BroadcastMsg': grpc.unary_unary_rpc_method_handler(
+                    servicer.BroadcastMsg,
+                    request_deserializer=raft__pb2.broadcasted_msg.FromString,
+                    response_serializer=raft__pb2.broadcast_response.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -164,5 +180,22 @@ class RaftService(object):
         return grpc.experimental.unary_unary(request, target, '/RaftService/DetermineFollowerAcks',
             raft__pb2.FollowerAckRequest.SerializeToString,
             raft__pb2.FollowerAckResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def BroadcastMsg(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/RaftService/BroadcastMsg',
+            raft__pb2.broadcasted_msg.SerializeToString,
+            raft__pb2.broadcast_response.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

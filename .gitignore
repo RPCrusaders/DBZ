@@ -2,3 +2,6 @@ __pycache__
 .venv
 .vscode
 .idea
+log_nodes_1/
+log_nodes_2/
+log_nodes_3/
