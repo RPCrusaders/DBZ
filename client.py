@@ -36,6 +36,7 @@ class DBZClient:
         Ackshually I will keep on trying to get a response from the leader.
         And keep on trying until I get a success.
         """
+        last_leader_id = 69
         while True:
             try:
                 response: raft_pb2.ClientReply = self.nodes_and_stubs[self.current_leader_id].ServeClient(raft_pb2.ClientRequest(request=request))
@@ -50,8 +51,12 @@ class DBZClient:
                     self.current_leader_id = random.randint(1, len(self.nodes_and_stubs))
                     return
                 # well, time to set the leader
-                print('Did not find leader, so setting leader to {}'.format(response.leader_id))
+                if response.leader_id == last_leader_id:
+                    self.current_leader_id = response.leader_id
+                    continue
+                last_leader_id = self.current_leader_id
                 self.current_leader_id = response.leader_id
+                print('Did not find leader, so setting leader to {}'.format(response.leader_id))
             except RpcError as rpc_error:
                 if rpc_error.code() == StatusCode.UNAVAILABLE:
                     print('Sent a request to a dead leader!')

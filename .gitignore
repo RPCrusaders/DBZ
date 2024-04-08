@@ -5,3 +5,4 @@ __pycache__
 log_nodes_1/
 log_nodes_2/
 log_nodes_3/
+scripts/deploy.sh

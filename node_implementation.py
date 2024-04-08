@@ -16,7 +16,7 @@ log_entry = namedtuple('log_entry', ['msg', 'term'])
 
 
 class Node(raft_pb2_grpc.RaftServiceServicer):
-    def __init__(self, _id, timeout_min=5000, timeout_max=10000):
+    def __init__(self, _id, timeout_min=7000, timeout_max=14000):
         self.election_timeout = None
         self.election_timer = None
         self.id = _id
